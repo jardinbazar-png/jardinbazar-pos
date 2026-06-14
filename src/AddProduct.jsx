@@ -15,13 +15,29 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
   const isEdit = !!productToEdit;
   const codigoRef = useRef(null);
 
+  const calcPrecioVenta = (costo, pct, tieneIva) => {
+    const c = parseFloat(costo) || 0;
+    const p = parseFloat(pct) || 0;
+    const iva = tieneIva ? 1.19 : 1;
+    if (p >= 100) return 0;
+    return Math.round((c * iva) / (1 - p / 100));
+  };
+
+  const calcPorcentaje = (costo, precioVenta, tieneIva) => {
+    const c = parseFloat(costo) || 0;
+    const pv = parseFloat(precioVenta) || 0;
+    const iva = tieneIva ? 1.19 : 1;
+    if (pv <= 0) return 0;
+    return Math.round((1 - (c * iva) / pv) * 100 * 10) / 10;
+  };
+
   const [form, setForm] = useState({
     codigo: productToEdit?.codigo || "",
     nombre: productToEdit?.nombre || "",
     tipo_venta: productToEdit?.tipo_venta || "Unidad",
     precio_costo_sin_iva: productToEdit?.precio_costo || 0,
     tiene_iva: productToEdit?.iva > 0 ?? true,
-    porcentaje_ganancia: 30,
+    porcentaje_ganancia: productToEdit ? calcPorcentaje(productToEdit.precio_costo, productToEdit.precio_venta, productToEdit.iva > 0) : 30,
     precio_venta: productToEdit?.precio_venta || 0,
     precio_mayoreo: productToEdit?.precio_mayoreo || 0,
     departamento: productToEdit?.departamento || "",
@@ -32,20 +48,33 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
     stock_maximo: productToEdit?.stock_maximo || 0,
   });
 
+  const [lastEdited, setLastEdited] = useState("pct"); // "pct" o "precio"
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const set = (key, val) => {
+  const handleChange = (key, val) => {
     setForm(prev => {
       const next = { ...prev, [key]: val };
-      // Calcular precio venta automáticamente
-      if (key === "precio_costo_sin_iva" || key === "porcentaje_ganancia" || key === "tiene_iva") {
-        const costo = parseFloat(key === "precio_costo_sin_iva" ? val : next.precio_costo_sin_iva) || 0;
-        const pct = parseFloat(key === "porcentaje_ganancia" ? val : next.porcentaje_ganancia) || 0;
-        const iva = (key === "tiene_iva" ? val : next.tiene_iva) ? 1.19 : 1;
-        const costoConIva = costo * iva;
-        next.precio_venta = Math.round(costoConIva / (1 - pct / 100));
+
+      if (key === "precio_costo_sin_iva" || key === "tiene_iva") {
+        // Recalcular según lo que el usuario editó último
+        if (lastEdited === "pct") {
+          next.precio_venta = calcPrecioVenta(next.precio_costo_sin_iva, next.porcentaje_ganancia, next.tiene_iva);
+        } else {
+          next.porcentaje_ganancia = calcPorcentaje(next.precio_costo_sin_iva, next.precio_venta, next.tiene_iva);
+        }
       }
+
+      if (key === "porcentaje_ganancia") {
+        setLastEdited("pct");
+        next.precio_venta = calcPrecioVenta(next.precio_costo_sin_iva, val, next.tiene_iva);
+      }
+
+      if (key === "precio_venta") {
+        setLastEdited("precio");
+        next.porcentaje_ganancia = calcPorcentaje(next.precio_costo_sin_iva, val, next.tiene_iva);
+      }
+
       return next;
     });
   };
@@ -70,29 +99,24 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
       activo: true,
     };
 
-    let error;
+    let err;
     if (isEdit) {
-      ({ error } = await supabase.from("productos").update(data).eq("id", productToEdit.id));
+      ({ error: err } = await supabase.from("productos").update(data).eq("id", productToEdit.id));
     } else {
-      ({ error } = await supabase.from("productos").insert(data));
+      ({ error: err } = await supabase.from("productos").insert(data));
     }
 
     setSaving(false);
-    if (error) { setError("Error al guardar: " + error.message); return; }
+    if (err) { setError("Error al guardar: " + err.message); return; }
     onSaved?.();
     onClose?.();
   };
 
-  const inp = (label, key, type="text", opts={}) => (
+  const inp = (label, key, type="text") => (
     <div style={s.field}>
       <label style={s.label}>{label}</label>
-      <input
-        style={s.input}
-        type={type}
-        value={form[key]}
-        onChange={e => set(key, type==="number" ? e.target.value : e.target.value)}
-        {...opts}
-      />
+      <input style={s.input} type={type} value={form[key]}
+        onChange={e => handleChange(key, type==="number" ? e.target.value : e.target.value)} />
     </div>
   );
 
@@ -108,25 +132,20 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
           {/* CÓDIGO */}
           <div style={s.field}>
             <label style={s.label}>Código de barra <span style={s.hint}>(escanea o escribe)</span></label>
-            <input
-              ref={codigoRef}
-              style={{ ...s.input, fontFamily:"monospace", fontSize:16 }}
-              value={form.codigo}
-              onChange={e => set("codigo", e.target.value)}
-              placeholder="Escanea el código de barra aquí"
-              autoFocus
-            />
+            <input ref={codigoRef} style={{ ...s.input, fontFamily:"monospace", fontSize:16 }}
+              value={form.codigo} onChange={e => handleChange("codigo", e.target.value)}
+              placeholder="Escanea el código aquí" autoFocus />
           </div>
 
-          {inp("Descripción / Nombre del producto", "nombre")}
+          {inp("Descripción / Nombre", "nombre")}
 
-          {/* TIPO DE VENTA */}
+          {/* TIPO VENTA */}
           <div style={s.field}>
             <label style={s.label}>Tipo de venta</label>
             <div style={s.pills}>
               {TIPOS_VENTA.map(t => (
                 <button key={t} style={{ ...s.pill, ...(form.tipo_venta===t ? s.pillActive : {}) }}
-                  onClick={() => set("tipo_venta", t)}>{t}</button>
+                  onClick={() => handleChange("tipo_venta", t)}>{t}</button>
               ))}
             </div>
           </div>
@@ -138,32 +157,38 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
             <div style={s.field}>
               <label style={s.label}>¿Tiene IVA?</label>
               <div style={s.pills}>
-                <button style={{ ...s.pill, ...(form.tiene_iva ? s.pillActive : {}) }} onClick={() => set("tiene_iva", true)}>Con IVA</button>
-                <button style={{ ...s.pill, ...(!form.tiene_iva ? s.pillActive : {}) }} onClick={() => set("tiene_iva", false)}>Sin IVA</button>
+                <button style={{ ...s.pill, ...(form.tiene_iva ? s.pillActive : {}) }} onClick={() => handleChange("tiene_iva", true)}>Con IVA</button>
+                <button style={{ ...s.pill, ...(!form.tiene_iva ? s.pillActive : {}) }} onClick={() => handleChange("tiene_iva", false)}>Sin IVA</button>
               </div>
             </div>
           </div>
 
-          <div style={s.row}>
+          {/* BIDIRECCIONAL */}
+          <div style={s.biBox}>
             <div style={s.field}>
-              <label style={s.label}>% Ganancia</label>
-              <input style={s.input} type="number" value={form.porcentaje_ganancia}
-                onChange={e => set("porcentaje_ganancia", e.target.value)} />
+              <label style={s.label}>% Ganancia <span style={s.hint}>(editable)</span></label>
+              <input style={{ ...s.input, borderColor: lastEdited==="pct" ? "#16a34a" : "#e5e7eb" }}
+                type="number" value={form.porcentaje_ganancia}
+                onChange={e => handleChange("porcentaje_ganancia", e.target.value)} />
             </div>
+            <div style={s.biArrow}>⇄</div>
             <div style={s.field}>
-              <label style={s.label}>Precio venta <span style={s.hint}>(calculado)</span></label>
-              <div style={s.calcPrice}>{fmt(form.precio_venta)}</div>
+              <label style={s.label}>Precio venta ($) <span style={s.hint}>(editable)</span></label>
+              <input style={{ ...s.input, borderColor: lastEdited==="precio" ? "#16a34a" : "#e5e7eb", fontWeight:700, color:"#16a34a" }}
+                type="number" value={form.precio_venta}
+                onChange={e => handleChange("precio_venta", e.target.value)} />
             </div>
           </div>
+          <div style={s.hint2}>Edita cualquiera de los dos y el otro se calcula solo</div>
 
           {inp("Precio mayoreo ($)", "precio_mayoreo", "number")}
 
-          {/* DEPARTAMENTO Y PROVEEDOR */}
+          {/* CLASIFICACIÓN */}
           <div style={s.section}>🏷️ Clasificación</div>
           <div style={s.row}>
             <div style={s.field}>
               <label style={s.label}>Departamento</label>
-              <select style={s.input} value={form.departamento} onChange={e => set("departamento", e.target.value)}>
+              <select style={s.input} value={form.departamento} onChange={e => handleChange("departamento", e.target.value)}>
                 <option value="">Seleccionar...</option>
                 {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
@@ -176,8 +201,8 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
           <div style={s.field}>
             <label style={s.label}>¿Usa inventario?</label>
             <div style={s.pills}>
-              <button style={{ ...s.pill, ...(form.usa_inventario ? s.pillActive : {}) }} onClick={() => set("usa_inventario", true)}>Sí</button>
-              <button style={{ ...s.pill, ...(!form.usa_inventario ? s.pillActive : {}) }} onClick={() => set("usa_inventario", false)}>No</button>
+              <button style={{ ...s.pill, ...(form.usa_inventario ? s.pillActive : {}) }} onClick={() => handleChange("usa_inventario", true)}>Sí</button>
+              <button style={{ ...s.pill, ...(!form.usa_inventario ? s.pillActive : {}) }} onClick={() => handleChange("usa_inventario", false)}>No</button>
             </div>
           </div>
 
@@ -214,10 +239,12 @@ const s = {
   section: { fontWeight:700, fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, paddingTop:8, borderTop:"1px solid #f3f4f6" },
   field: { display:"flex", flexDirection:"column", gap:5, flex:1 },
   row: { display:"flex", gap:12 },
+  biBox: { display:"flex", gap:12, alignItems:"flex-end" },
+  biArrow: { fontSize:20, color:"#9ca3af", paddingBottom:10, flexShrink:0 },
   label: { fontSize:12, fontWeight:600, color:"#374151" },
   hint: { fontWeight:400, color:"#9ca3af" },
-  input: { border:"1.5px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:14, color:"#111827", outline:"none", background:"#f9fafb" },
-  calcPrice: { border:"1.5px solid #16a34a", borderRadius:8, padding:"10px 12px", fontSize:16, fontWeight:800, color:"#16a34a", background:"#f0fdf4" },
+  hint2: { fontSize:11, color:"#9ca3af", marginTop:-8 },
+  input: { border:"1.5px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:14, color:"#111827", outline:"none", background:"#f9fafb", transition:"border-color .15s" },
   pills: { display:"flex", gap:6, flexWrap:"wrap" },
   pill: { padding:"6px 12px", borderRadius:20, border:"1.5px solid #e5e7eb", background:"#f9fafb", fontSize:12, fontWeight:600, color:"#6b7280", cursor:"pointer" },
   pillActive: { background:"#16a34a", borderColor:"#16a34a", color:"#fff" },
