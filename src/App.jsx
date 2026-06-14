@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import AddProduct from "./AddProduct.jsx";
 
 // ─── CONEXIÓN A TU SUPABASE ───────────────────────
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
@@ -52,6 +53,8 @@ export default function POSApp() {
   const [time, setTime] = useState(fmtTime());
   const [online, setOnline] = useState(navigator.onLine);
   const [saleCount, setSaleCount] = useState(0);
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [editProduct, setEditProduct] = useState(null);
   const [totalVentas, setTotalVentas] = useState(0);
   const searchRef = useRef(null);
 
@@ -362,6 +365,7 @@ export default function POSApp() {
                 <input style={s.searchInput} placeholder="Buscar producto…"
                   onChange={e => setQuery(e.target.value)} />
               </div>
+              <button style={s.addBtn} onClick={() => setShowAddProduct(true)}>+ Agregar producto</button>
               <button style={s.reloadBtn} onClick={loadProducts}>
                 <Ico path={I.refresh} size={14} /> Actualizar
               </button>
@@ -397,6 +401,7 @@ export default function POSApp() {
                             </span>
                           </td>
                           <td style={{ ...s.td, color: "#9ca3af" }}>{p.stock_minimo}</td>
+                        <td style={s.td}><button style={s.editBtn} onClick={() => { setEditProduct(p); setShowAddProduct(true); }}>Editar</button></td>
                         </tr>
                       );
                     })}
@@ -497,6 +502,8 @@ export default function POSApp() {
           </div>
         </div>
       )}
+
+      {showAddProduct && <AddProduct productToEdit={editProduct} onClose={() => { setShowAddProduct(false); setEditProduct(null); }} onSaved={loadProducts} />}
 
       {/* ── FLASH ÉXITO ── */}
       {successMsg && (
