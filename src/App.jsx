@@ -305,4 +305,310 @@ export default function POSApp() {
                       </div>
                     </button>
                   ))}
-                  {filtered.length === 0 && <div style={s.empty}><Ico path={I
+                  {filtered.length === 0 && <div style={s.empty}><Ico path={I.search} size={32} /><p>{filterStockBajo ? "No hay productos con stock bajo" : `Sin resultados para "${query}"`}</p></div>}
+                  {filtered.length > 60 && <div style={{ ...s.empty, fontSize: 12, color: "#9ca3af" }}>Mostrando 60 de {filtered.length} — refina la búsqueda</div>}
+                </div>
+              )}
+            </section>
+
+            <section style={s.cartPanel}>
+              <div style={s.cartHeader}>
+                <Ico path={I.cart} size={16} />
+                <span style={{ fontWeight: 700 }}>{tickets[ticketActivo]?.nombre}</span>
+                {cart.length > 0 && <button style={s.clearCart} onClick={() => setCart([])}>Limpiar</button>}
+              </div>
+              <div style={s.cartItems}>
+                {cart.length === 0 && <div style={s.emptyCart}><Ico path={I.cart} size={36} /><p>Escanea o selecciona productos</p><p style={{ fontSize: 11, color: "#d1d5db" }}>F3 venta rápida · F5 nuevo ticket</p></div>}
+                {cart.map(item => (
+                  <div key={item.id} style={s.cartItem}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={s.cartName}>{item.nombre}</div>
+                      <div style={s.cartSub}>{fmt(item.precio_venta)} c/u</div>
+                    </div>
+                    <div style={s.qtyCtrl}>
+                      <button style={s.qtyBtn} onClick={() => updateQty(item.id, -1)}><Ico path={item.qty === 1 ? I.trash : I.minus} size={12} /></button>
+                      <span style={s.qtyNum}>{item.qty}</span>
+                      <button style={s.qtyBtn} onClick={() => updateQty(item.id, 1)}><Ico path={I.plus} size={12} /></button>
+                    </div>
+                    <div style={s.cartTotal}>{fmt(item.precio_venta * item.qty)}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={s.totals}>
+                <div style={s.totalRow}><span style={{ color: "#6b7280" }}>Subtotal</span><span>{fmt(total)}</span></div>
+                {isAdmin && cart.length > 0 && (
+                  <div style={s.totalRow}>
+                    <span style={{ color: "#9ca3af", fontSize: 11 }}>Utilidad aprox.</span>
+                    <span style={{ color: "#16a34a", fontSize: 11, fontWeight: 700 }}>{fmt(cart.reduce((s, i) => s + (i.precio_venta - i.precio_costo) * i.qty, 0))}</span>
+                  </div>
+                )}
+                <div style={s.totalBig}><span>TOTAL</span><span>{fmt(total)}</span></div>
+              </div>
+              <button style={{ ...s.payBtn, opacity: cart.length === 0 ? 0.4 : 1 }} disabled={cart.length === 0} onClick={() => setPayModal(true)}>
+                <Ico path={I.cash} size={18} /> Cobrar [F4]
+              </button>
+            </section>
+          </div>
+        )}
+
+        {view === "inventario" && (
+          <div style={s.tableWrap}>
+            <div style={s.toolbar}>
+              <div style={s.searchBox}>
+                <Ico path={I.search} size={15} />
+                <input style={s.searchInput} placeholder="Buscar producto…" onChange={e => setQuery(e.target.value)} />
+              </div>
+              <button style={s.addBtn} onClick={() => { setEditProduct(null); setIsDuplicateMode(false); setShowAddProduct(true); }}>+ Agregar producto</button>
+              <button style={{ ...s.toolBtn, borderColor: filterStockBajo ? "#d97706" : "#e5e7eb", color: filterStockBajo ? "#d97706" : "#374151" }}
+                onClick={() => setFilterStockBajo(!filterStockBajo)}>
+                <Ico path={I.filter} size={14} />{filterStockBajo ? "Ver todos" : `Stock bajo (${stockBajoCount})`}
+              </button>
+              <button style={s.reloadBtn} onClick={loadProducts}><Ico path={I.refresh} size={14} /> Actualizar</button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              <table style={s.table}>
+                <thead>
+                  <tr>{["Código", "Producto", "Departamento", ...(isAdmin ? ["Costo", "Margen"] : []), "Precio", "Stock", "Mín.", ""].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {products.filter(p => {
+                    const mq = !query || p.nombre?.toLowerCase().includes(query.toLowerCase());
+                    const ms = !filterStockBajo || (p.existencia <= p.stock_minimo && p.stock_minimo > 0);
+                    return mq && ms;
+                  }).map(p => {
+                    const margin = p.precio_venta > 0 ? ((p.precio_venta - p.precio_costo) / p.precio_venta * 100).toFixed(1) : 0;
+                    const isLow = p.existencia <= p.stock_minimo && p.stock_minimo > 0;
+                    return (
+                      <tr key={p.id} style={{ background: isLow ? "#fef9c3" : "transparent" }}>
+                        <td style={{ ...s.td, fontFamily: "monospace", fontSize: 11, color: "#9ca3af" }}>{p.codigo}</td>
+                        <td style={{ ...s.td, fontWeight: 600 }}>{p.nombre}</td>
+                        <td style={s.td}><span style={s.dept}>{p.departamento}</span></td>
+                        {isAdmin && <>
+                          <td style={{ ...s.td, color: "#6b7280" }}>{fmt(p.precio_costo)}</td>
+                          <td style={{ ...s.td, fontWeight: 700, color: parseFloat(margin) > 20 ? "#16a34a" : "#d97706" }}>{margin}%</td>
+                        </>}
+                        <td style={{ ...s.td, fontWeight: 700 }}>{fmt(p.precio_venta)}</td>
+                        <td style={s.td}><span style={{ color: p.existencia <= 0 ? "#ef4444" : isLow ? "#f59e0b" : "#16a34a", fontWeight: 600 }}>{isLow && "⚠ "}{p.existencia}</span></td>
+                        <td style={{ ...s.td, color: "#9ca3af" }}>{p.stock_minimo}</td>
+                        <td style={s.td}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button style={s.editBtn} onClick={() => { setEditProduct(p); setIsDuplicateMode(false); setShowAddProduct(true); }}>Editar</button>
+                            <button style={{ ...s.editBtn, color: "#2563eb" }} onClick={() => { setEditProduct(p); setIsDuplicateMode(true); setShowAddProduct(true); }} title="Duplicar producto">
+                              <Ico path={I.copy} size={11} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {view === "caja" && <CierreCaja usuario={usuario} />}
+        {view === "turnos" && <Turnos usuario={usuario} />}
+        {view === "reportes" && isAdmin && (
+          <div style={s.cajaWrap}>
+            <div style={s.cajaNote}><Ico path={I.chart} size={16} /><span>Los reportes con gráficos y desglose de comisiones se activan en la próxima etapa.</span></div>
+          </div>
+        )}
+        {view === "usuarios" && isAdmin && <Usuarios />}
+      </main>
+
+      {/* MODAL COBRO */}
+      {payModal && (
+        <div style={s.overlay} onClick={e => e.target === e.currentTarget && setPayModal(false)}>
+          <div style={s.modal}>
+            <div style={s.modalHeader}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Cobrar — {tickets[ticketActivo]?.nombre}</span>
+              <button style={s.iconBtn} onClick={() => setPayModal(false)}><Ico path={I.x} size={18} /></button>
+            </div>
+            <div style={s.modalTotal}>{fmt(total)}</div>
+            <div style={{ textAlign: "center", color: "#6b7280", fontSize: 13, marginBottom: 20 }}>{cart.length} producto{cart.length !== 1 ? "s" : ""}</div>
+            <div style={s.methods}>
+              {[
+                { key: "efectivo", icon: I.cash, label: "Efectivo" },
+                { key: "debito", icon: I.card, label: "Débito" },
+                { key: "credito", icon: I.card, label: "Crédito" },
+                { key: "transferencia", icon: I.transfer, label: "Transfer." },
+                { key: "fiado", icon: I.user, label: "Fiado" },
+              ].map(({ key, icon, label }) => (
+                <button key={key} style={{ ...s.methodBtn, ...(payMethod === key ? s.methodActive : {}) }} onClick={() => setPayMethod(key)}>
+                  <Ico path={icon} size={18} /><span>{label}</span>
+                </button>
+              ))}
+            </div>
+            {payMethod === "efectivo" && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Efectivo recibido</label>
+                <input style={s.cashField} type="number" placeholder="0" value={cashInput} onChange={e => setCashInput(e.target.value)} autoFocus />
+                {cashInput && <div style={s.changeRow}><span style={{ color: "#6b7280" }}>Vuelto:</span><span style={{ color: change >= 0 ? "#16a34a" : "#ef4444", fontWeight: 800, fontSize: 22 }}>{fmt(Math.max(0, change))}</span></div>}
+              </div>
+            )}
+            {(payMethod === "debito" || payMethod === "credito") && (
+              <div style={{ marginBottom: 16, background: "#eff6ff", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2563eb" }}>
+                ℹ️ La comisión por {payMethod} se descontará en los reportes de ganancia.
+              </div>
+            )}
+            {payMethod === "fiado" && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Nombre del cliente</label>
+                <input style={s.cashField} type="text" placeholder="Nombre de quien fía" value={fiadoNombre} onChange={e => setFiadoNombre(e.target.value)} autoFocus />
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={s.cancelBtn} onClick={() => setPayModal(false)}>Cancelar</button>
+              <button style={{ ...s.confirmBtn, opacity: (payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre) ? 0.4 : 1 }}
+                disabled={(payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre)}
+                onClick={() => completeSale()}>
+                <Ico path={I.check} size={18} /> Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VENTA RÁPIDA */}
+      {showVentaRapida && (
+        <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowVentaRapida(false)}>
+          <div style={{ ...s.modal, maxWidth: 340 }}>
+            <div style={s.modalHeader}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>⚡ Venta rápida sin código</span>
+              <button style={s.iconBtn} onClick={() => setShowVentaRapida(false)}><Ico path={I.x} size={18} /></button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "#374151", fontWeight: 600, display: "block", marginBottom: 6 }}>Descripción (opcional)</label>
+              <input style={s.cashField} type="text" placeholder="Ej: Producto sin código..." value={ventaRapidaDesc} onChange={e => setVentaRapidaDesc(e.target.value)} autoFocus />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, color: "#374151", fontWeight: 600, display: "block", marginBottom: 6 }}>Monto ($)</label>
+              <input style={{ ...s.cashField, fontSize: 28 }} type="number" placeholder="0" value={ventaRapidaMonto} onChange={e => setVentaRapidaMonto(e.target.value)} />
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={s.cancelBtn} onClick={() => setShowVentaRapida(false)}>Cancelar</button>
+              <button style={{ ...s.confirmBtn, opacity: !ventaRapidaMonto || parseFloat(ventaRapidaMonto) <= 0 ? 0.4 : 1 }}
+                disabled={!ventaRapidaMonto || parseFloat(ventaRapidaMonto) <= 0}
+                onClick={() => completeSale(parseFloat(ventaRapidaMonto), ventaRapidaDesc)}>
+                <Ico path={I.check} size={18} /> Registrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddProduct && (
+        <AddProduct 
+          productToEdit={editProduct} 
+          isDuplicate={isDuplicateMode} 
+          onClose={() => { setShowAddProduct(false); setEditProduct(null); setIsDuplicateMode(false); }} 
+          onSaved={loadProducts} 
+        />
+      )}
+
+      {successMsg && <div style={s.successFlash}><Ico path={I.check} size={28} /><span>{successMsg}</span></div>}
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #f3f4f6; font-family: 'Inter', sans-serif; }
+        button { font-family: 'Inter', sans-serif; cursor: pointer; }
+        input { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+      `}</style>
+    </div>
+  );
+}
+
+const s = {
+  root: { display: "flex", height: "100vh", background: "#f3f4f6" },
+  sidebar: { width: 240, background: "#111827", display: "flex", flexDirection: "column", padding: 16 },
+  logo: { display: "flex", alignItems: "center", gap: 12, padding: "8px 12px 24px" },
+  logoIcon: { fontSize: 24 },
+  logoName: { color: "#fff", fontWeight: 800, fontSize: 16 },
+  logoSub: { color: "#9ca3af", fontSize: 11 },
+  navBtn: { display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "12px 16px", background: "none", border: "none", borderRadius: 8, color: "#9ca3af", fontSize: 13, fontWeight: 600, textAlign: "left", transition: "all .15s" },
+  navActive: { background: "#1f2937", color: "#fff" },
+  stockAlert: { display: "flex", alignItems: "center", gap: 8, background: "#7f1d1d", color: "#fca5a5", padding: "10px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 },
+  userBar: { display: "flex", alignItems: "center", gap: 12, padding: "12px 8px", borderTop: "1px solid #1f2937" },
+  userAvatar: { width: 32, height: 32, background: "#374151", color: "#fff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
+  logoutBtn: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", padding: 4 },
+  statusBar: { display: "flex", alignItems: "center", gap: 8, paddingTop: 12, borderTop: "1px solid #1f2937" },
+  dot: { width: 8, height: 8, borderRadius: "50%" },
+  statusTxt: { color: "#9ca3af", fontSize: 11 },
+  main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
+  topbar: { height: 64, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px" },
+  topDate: { fontSize: 14, fontWeight: 600, color: "#374151", textTransform: "capitalize" },
+  topRight: { display: "flex", alignItems: "center", gap: 24 },
+  kpi: { display: "flex", flexDirection: "column", alignItems: "flex-end" },
+  kpiLabel: { fontSize: 10, color: "#6b7280", textTransform: "uppercase", fontWeight: 600 },
+  kpiVal: { fontSize: 15, fontWeight: 800, color: "#111827" },
+  clock: { fontSize: 16, fontWeight: 700, color: "#111827", background: "#f3f4f6", padding: "6px 12px", borderRadius: 8, fontFamily: "monospace" },
+  posLayout: { flex: 1, display: "flex", overflow: "hidden" },
+  prodPanel: { flex: 1, display: "flex", flexDirection: "column", padding: 20, overflow: "hidden" },
+  ticketTabs: { display: "flex", gap: 6, marginBottom: 14, borderBottom: "2px solid #e5e7eb", paddingBottom: 1 },
+  ticketTab: { display: "flex", alignItems: "center", background: "#e5e7eb", borderRadius: "8px 8px 0 0", overflow: "hidden" },
+  ticketTabActive: { background: "#fff", border: "2px solid #e5e7eb", borderBottom: "none", transform: "translateY(2px)" },
+  ticketTabBtn: { background: "none", border: "none", padding: "8px 16px", fontSize: 13, fontWeight: 700, color: "#4b5563" },
+  ticketBadge: { background: "#16a34a", color: "#fff", fontSize: 10, padding: "2px 6px", borderRadius: 10, marginLeft: 6 },
+  ticketClose: { background: "none", border: "none", paddingRight: 10, fontSize: 16, color: "#9ca3af", cursor: "pointer" },
+  ticketAdd: { background: "#f3f4f6", border: "1px dashed #cbd5e1", padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, color: "#64748b" },
+  posToolbar: { display: "flex", gap: 12, marginBottom: 16 },
+  searchBox: { display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", height: 42 },
+  searchInput: { border: "none", outline: "none", width: "100%", fontSize: 14, color: "#111827" },
+  clearBtn: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer" },
+  toolBtn: { display: "flex", alignItems: "center", gap: 8, border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", height: 42, fontSize: 13, fontWeight: 600, background: "#fff" },
+  grid: { flex: 1, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12, overflowY: "auto", alignContent: "start" },
+  card: { position: "relative", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", alignItems: "flex-start", textAlign: "left", transition: "all .15s" },
+  agotado: { position: "absolute", inset: 0, background: "#ffffffaa", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", fontWeight: 800, fontSize: 14, borderRadius: 12 },
+  lowStock: { position: "absolute", top: 6, right: 6, background: "#fef3c7", color: "#d97706", fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, display: "flex", alignItems: "center", gap: 3 },
+  cardDept: { fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", marginBottom: 4 },
+  cardName: { fontSize: 13, fontWeight: 600, color: "#111827", height: 38, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" },
+  cardFooter: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 8, borderTop: "1px dashed #f3f4f6" },
+  cardPrice: { fontSize: 14, fontWeight: 800, color: "#16a34a" },
+  cardStock: { fontSize: 11, fontWeight: 500 },
+  empty: { gridColumn: "1/-1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, color: "#9ca3af", gap: 12 },
+  cartPanel: { width: 340, background: "#fff", borderLeft: "1px solid #e5e7eb", display: "flex", flexDirection: "column" },
+  cartHeader: { display: "flex", alignItems: "center", gap: 10, padding: "18px 20px", borderBottom: "1px solid #e5e7eb" },
+  clearCart: { marginLeft: "auto", background: "none", border: "none", color: "#ef4444", fontSize: 12, fontWeight: 600 },
+  cartItems: { flex: 1, overflowY: "auto", padding: "10px 20px" },
+  emptyCart: { height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#9ca3af", gap: 10, textAlign: "center" },
+  cartItem: { display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid #f3f4f6" },
+  cartName: { fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  cartSub: { fontSize: 11, color: "#6b7280", marginTop: 2 },
+  qtyCtrl: { display: "flex", alignItems: "center", gap: 6, background: "#f3f4f6", padding: 4, borderRadius: 6 },
+  qtyBtn: { width: 22, height: 22, borderRadius: 4, border: "none", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", color: "#4b5563", boxShadow: "0 1px 3px #0001" },
+  qtyNum: { fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 16, textAlign: "center" },
+  cartTotal: { fontSize: 13, fontWeight: 700, color: "#111827", marginLeft: "auto" },
+  totals: { padding: 20, background: "#f9fafb", borderTop: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 8 },
+  totalRow: { display: "flex", justifyContent: "space-between", fontSize: 13 },
+  totalBig: { display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: "#111827", marginTop: 4, paddingTop: 8, borderTop: "1px solid #e5e7eb" },
+  payBtn: { margin: "0 20px 20px", padding: 14, background: "#16a34a", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 4px 12px #16a34a44" },
+  tableWrap: { flex: 1, padding: 24, display: "flex", flexDirection: "column", overflow: "hidden" },
+  toolbar: { display: "flex", gap: 12, marginBottom: 16, alignItems: "center" },
+  addBtn: { background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", height: 40, fontSize: 13, fontWeight: 700 },
+  reloadBtn: { background: "none", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", height: 40, fontSize: 13, fontWeight: 600, color: "#4b5563" },
+  table: { width: "100%", borderCollapse: "collapse", textAlign: "left" },
+  th: { padding: "12px 16px", background: "#f9fafb", borderBottom: "1.5px solid #e5e7eb", fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" },
+  td: { padding: "14px 16px", borderBottom: "1px solid #e5e7eb", fontSize: 13, color: "#111827" },
+  dept: { background: "#f3f4f6", padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#4b5563" },
+  editBtn: { background: "none", border: "none", color: "#16a34a", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  overlay: { position: "fixed", inset: 0, background: "#00000077", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 },
+  modal: { background: "#fff", borderRadius: 16, width: "100%", maxWidth: 400, padding: 24, boxShadow: "0 20px 60px #0004" },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  iconBtn: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer" },
+  modalTotal: { fontSize: 42, fontWeight: 800, color: "#16a34a", textAlign: "center" },
+  methods: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 20 },
+  methodBtn: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 8px", border: "1.5px solid #e5e7eb", borderRadius: 10, background: "#f9fafb", color: "#4b5563", fontSize: 11, fontWeight: 600 },
+  methodActive: { borderColor: "#16a34a", background: "#f0fdf4", color: "#16a34a" },
+  cashField: { width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", fontSize: 16, fontWeight: 700, textAlign: "center", outline: "none", background: "#f9fafb" },
+  changeRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, background: "#f0fdf4", padding: "8px 14px", borderRadius: 8 },
+  cancelBtn: { flex: 1, padding: 12, background: "none", border: "1.5px solid #e5e7eb", borderRadius: 8, color: "#4b5563", fontSize: 13, fontWeight: 600 },
+  confirmBtn: { flex: 1, padding: 12, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 },
+  successFlash: { position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#111827", color: "#fff", padding: "14px 24px", borderRadius: 12, display: "flex", alignItems: "center", gap: 12, fontWeight: 700, fontSize: 14, boxShadow: "0 10px 30px #0003", zIndex: 400 },
+  cajaWrap: { padding: 24 },
+  cajaNote: { display: "flex", alignItems: "center", gap: 10, background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: 16, borderRadius: 10, color: "#1e40af", fontSize: 13, fontWeight: 500 }
+};
