@@ -1,11 +1,10 @@
-// ═══════════════════════════════════════════════════
-// JARDINBAZAR POS v3 — Con login por PIN y usuarios
-// ═══════════════════════════════════════════════════
+// JARDINBAZAR POS v4 — Con CierreCaja y Usuarios editables
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import AddProduct from "./AddProduct.jsx";
 import Login from "./Login.jsx";
-import Usuarios from "./Usuarios.jsx";
+import Usuarios from "./Usuarios_v2.jsx";
+import CierreCaja from "./CierreCaja.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -65,7 +64,6 @@ export default function POSApp() {
   const [ventaRapidaDesc, setVentaRapidaDesc] = useState("");
   const [fiadoNombre, setFiadoNombre] = useState("");
   const searchRef = useRef(null);
-
   const isAdmin = usuario?.rol === "admin";
 
   const loadProducts = useCallback(async () => {
@@ -141,47 +139,31 @@ export default function POSApp() {
   const completeSale = async (montoExtra = 0, descExtra = "") => {
     const totalFinal = montoExtra > 0 ? montoExtra : total;
     if (totalFinal <= 0) return;
-
     const { data: venta, error: ventaError } = await supabase
       .from("ventas")
       .insert({ total: totalFinal, metodo_pago: payMethod + (fiadoNombre ? `_fiado:${fiadoNombre}` : "") })
       .select().single();
-
     if (ventaError) { alert("Error al registrar venta"); return; }
-
     if (montoExtra > 0) {
       await supabase.from("detalle_ventas").insert({
-        venta_id: venta.id,
-        producto_id: null,
+        venta_id: venta.id, producto_id: null,
         nombre_producto: descExtra || "Venta rápida sin código",
-        precio_unitario: montoExtra,
-        cantidad: 1,
-        subtotal: montoExtra,
+        precio_unitario: montoExtra, cantidad: 1, subtotal: montoExtra,
       });
     } else {
       const detalles = cart.map(i => ({
-        venta_id: venta.id,
-        producto_id: i.id,
-        nombre_producto: i.nombre,
-        precio_unitario: i.precio_venta,
-        cantidad: i.qty,
-        subtotal: i.precio_venta * i.qty,
+        venta_id: venta.id, producto_id: i.id, nombre_producto: i.nombre,
+        precio_unitario: i.precio_venta, cantidad: i.qty, subtotal: i.precio_venta * i.qty,
       }));
       await supabase.from("detalle_ventas").insert(detalles);
       for (const item of cart) {
         await supabase.from("productos").update({ existencia: item.existencia - item.qty }).eq("id", item.id);
       }
     }
-
     setSaleCount(n => n + 1);
     setTotalVentas(n => n + totalFinal);
-    setCart([]);
-    setPayModal(false);
-    setShowVentaRapida(false);
-    setCashInput("");
-    setFiadoNombre("");
-    setVentaRapidaMonto("");
-    setVentaRapidaDesc("");
+    setCart([]); setPayModal(false); setShowVentaRapida(false);
+    setCashInput(""); setFiadoNombre(""); setVentaRapidaMonto(""); setVentaRapidaDesc("");
     setSuccessMsg(`¡Venta registrada! ${fmt(totalFinal)}`);
     setTimeout(() => setSuccessMsg(""), 2500);
     loadProducts();
@@ -201,7 +183,6 @@ export default function POSApp() {
 
   return (
     <div style={s.root}>
-      {/* SIDEBAR */}
       <aside style={s.sidebar}>
         <div style={s.logo}>
           <span style={s.logoIcon}>🏪</span>
@@ -210,23 +191,15 @@ export default function POSApp() {
             <div style={s.logoSub}>Sistema POS</div>
           </div>
         </div>
-
         {navItems.map(({ key, icon, label }) => (
           <button key={key} style={{ ...s.navBtn, ...(view === key ? s.navActive : {}) }} onClick={() => setView(key)}>
             <Ico path={icon} size={16} />{label}
           </button>
         ))}
-
         <div style={{ flex: 1 }} />
-
         {stockBajoCount > 0 && (
-          <div style={s.stockAlert}>
-            <Ico path={I.warn} size={14} />
-            <span>{stockBajoCount} con stock bajo</span>
-          </div>
+          <div style={s.stockAlert}><Ico path={I.warn} size={14} /><span>{stockBajoCount} con stock bajo</span></div>
         )}
-
-        {/* Usuario activo */}
         <div style={s.userBar}>
           <div style={s.userAvatar}>{usuario.nombre[0].toUpperCase()}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -237,14 +210,12 @@ export default function POSApp() {
             <Ico path={I.logout} size={14} />
           </button>
         </div>
-
         <div style={s.statusBar}>
           <span style={{ ...s.dot, background: online ? "#22c55e" : "#ef4444" }} />
           <span style={s.statusTxt}>{online ? "En línea" : "Sin conexión"}</span>
         </div>
       </aside>
 
-      {/* MAIN */}
       <main style={s.main}>
         <header style={s.topbar}>
           <div style={s.topDate}>{fmtDate()}</div>
@@ -255,7 +226,6 @@ export default function POSApp() {
           </div>
         </header>
 
-        {/* ── POS ── */}
         {view === "pos" && (
           <div style={s.posLayout}>
             <section style={s.prodPanel}>
@@ -273,19 +243,14 @@ export default function POSApp() {
                 </div>
                 <button style={{ ...s.toolBtn, background: filterStockBajo ? "#fef3c7" : "#fff", borderColor: filterStockBajo ? "#d97706" : "#e5e7eb", color: filterStockBajo ? "#d97706" : "#374151" }}
                   onClick={() => setFilterStockBajo(!filterStockBajo)}>
-                  <Ico path={I.filter} size={14} />
-                  Stock bajo {stockBajoCount > 0 && `(${stockBajoCount})`}
+                  <Ico path={I.filter} size={14} />Stock bajo {stockBajoCount > 0 && `(${stockBajoCount})`}
                 </button>
                 <button style={{ ...s.toolBtn, background: "#f0fdf4", borderColor: "#16a34a", color: "#16a34a" }}
                   onClick={() => setShowVentaRapida(true)}>
-                  <Ico path={I.zap} size={14} />
-                  Venta rápida [F3]
+                  <Ico path={I.zap} size={14} />Venta rápida [F3]
                 </button>
               </div>
-
-              {loading ? (
-                <div style={s.center}>Cargando productos...</div>
-              ) : (
+              {loading ? <div style={s.center}>Cargando productos...</div> : (
                 <div style={s.grid}>
                   {filtered.slice(0, 60).map(p => (
                     <button key={p.id} style={{ ...s.card, opacity: p.existencia <= 0 ? 0.4 : 1 }}
@@ -298,28 +263,15 @@ export default function POSApp() {
                       <div style={s.cardName}>{p.nombre}</div>
                       <div style={s.cardFooter}>
                         <span style={s.cardPrice}>{fmt(p.precio_venta)}</span>
-                        <span style={{ ...s.cardStock, color: p.existencia <= 0 ? "#ef4444" : p.existencia <= 5 ? "#f59e0b" : "#6b7280" }}>
-                          {p.existencia} uds
-                        </span>
+                        <span style={{ ...s.cardStock, color: p.existencia <= 0 ? "#ef4444" : p.existencia <= 5 ? "#f59e0b" : "#6b7280" }}>{p.existencia} uds</span>
                       </div>
                     </button>
                   ))}
-                  {filtered.length === 0 && (
-                    <div style={s.empty}>
-                      <Ico path={I.search} size={32} />
-                      <p>{filterStockBajo ? "No hay productos con stock bajo" : `Sin resultados para "${query}"`}</p>
-                    </div>
-                  )}
-                  {filtered.length > 60 && (
-                    <div style={{ ...s.empty, fontSize: 12, color: "#9ca3af" }}>
-                      Mostrando 60 de {filtered.length} — refina la búsqueda
-                    </div>
-                  )}
+                  {filtered.length === 0 && <div style={s.empty}><Ico path={I.search} size={32} /><p>{filterStockBajo ? "No hay productos con stock bajo" : `Sin resultados para "${query}"`}</p></div>}
+                  {filtered.length > 60 && <div style={{ ...s.empty, fontSize: 12, color: "#9ca3af" }}>Mostrando 60 de {filtered.length} — refina la búsqueda</div>}
                 </div>
               )}
             </section>
-
-            {/* CARRITO */}
             <section style={s.cartPanel}>
               <div style={s.cartHeader}>
                 <Ico path={I.cart} size={16} />
@@ -327,13 +279,7 @@ export default function POSApp() {
                 {cart.length > 0 && <button style={s.clearCart} onClick={() => setCart([])}>Limpiar</button>}
               </div>
               <div style={s.cartItems}>
-                {cart.length === 0 && (
-                  <div style={s.emptyCart}>
-                    <Ico path={I.cart} size={36} />
-                    <p>Escanea o selecciona productos</p>
-                    <p style={{ fontSize: 11, color: "#d1d5db" }}>F3 para venta rápida sin código</p>
-                  </div>
-                )}
+                {cart.length === 0 && <div style={s.emptyCart}><Ico path={I.cart} size={36} /><p>Escanea o selecciona productos</p><p style={{ fontSize: 11, color: "#d1d5db" }}>F3 para venta rápida sin código</p></div>}
                 {cart.map(item => (
                   <div key={item.id} style={s.cartItem}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -341,13 +287,9 @@ export default function POSApp() {
                       <div style={s.cartSub}>{fmt(item.precio_venta)} c/u</div>
                     </div>
                     <div style={s.qtyCtrl}>
-                      <button style={s.qtyBtn} onClick={() => updateQty(item.id, -1)}>
-                        <Ico path={item.qty === 1 ? I.trash : I.minus} size={12} />
-                      </button>
+                      <button style={s.qtyBtn} onClick={() => updateQty(item.id, -1)}><Ico path={item.qty === 1 ? I.trash : I.minus} size={12} /></button>
                       <span style={s.qtyNum}>{item.qty}</span>
-                      <button style={s.qtyBtn} onClick={() => updateQty(item.id, 1)}>
-                        <Ico path={I.plus} size={12} />
-                      </button>
+                      <button style={s.qtyBtn} onClick={() => updateQty(item.id, 1)}><Ico path={I.plus} size={12} /></button>
                     </div>
                     <div style={s.cartTotal}>{fmt(item.precio_venta * item.qty)}</div>
                   </div>
@@ -358,22 +300,18 @@ export default function POSApp() {
                 {isAdmin && cart.length > 0 && (
                   <div style={s.totalRow}>
                     <span style={{ color: "#9ca3af", fontSize: 11 }}>Utilidad aprox.</span>
-                    <span style={{ color: "#16a34a", fontSize: 11, fontWeight: 700 }}>
-                      {fmt(cart.reduce((s, i) => s + (i.precio_venta - i.precio_costo) * i.qty, 0))}
-                    </span>
+                    <span style={{ color: "#16a34a", fontSize: 11, fontWeight: 700 }}>{fmt(cart.reduce((s, i) => s + (i.precio_venta - i.precio_costo) * i.qty, 0))}</span>
                   </div>
                 )}
                 <div style={s.totalBig}><span>TOTAL</span><span>{fmt(total)}</span></div>
               </div>
-              <button style={{ ...s.payBtn, opacity: cart.length === 0 ? 0.4 : 1 }}
-                disabled={cart.length === 0} onClick={() => setPayModal(true)}>
+              <button style={{ ...s.payBtn, opacity: cart.length === 0 ? 0.4 : 1 }} disabled={cart.length === 0} onClick={() => setPayModal(true)}>
                 <Ico path={I.cash} size={18} /> Cobrar [F4]
               </button>
             </section>
           </div>
         )}
 
-        {/* ── INVENTARIO ── */}
         {view === "inventario" && (
           <div style={s.tableWrap}>
             <div style={s.toolbar}>
@@ -384,95 +322,54 @@ export default function POSApp() {
               <button style={s.addBtn} onClick={() => { setEditProduct(null); setShowAddProduct(true); }}>+ Agregar producto</button>
               <button style={{ ...s.toolBtn, borderColor: filterStockBajo ? "#d97706" : "#e5e7eb", color: filterStockBajo ? "#d97706" : "#374151" }}
                 onClick={() => setFilterStockBajo(!filterStockBajo)}>
-                <Ico path={I.filter} size={14} />
-                {filterStockBajo ? "Ver todos" : `Stock bajo (${stockBajoCount})`}
+                <Ico path={I.filter} size={14} />{filterStockBajo ? "Ver todos" : `Stock bajo (${stockBajoCount})`}
               </button>
-              <button style={s.reloadBtn} onClick={loadProducts}>
-                <Ico path={I.refresh} size={14} /> Actualizar
-              </button>
+              <button style={s.reloadBtn} onClick={loadProducts}><Ico path={I.refresh} size={14} /> Actualizar</button>
             </div>
             <div style={{ overflowY: "auto", flex: 1 }}>
               <table style={s.table}>
                 <thead>
-                  <tr>{["Código", "Producto", "Departamento", ...(isAdmin ? ["Costo", "Margen"] : []), "Precio", "Stock", "Mín.", ""].map(h => (
-                    <th key={h} style={s.th}>{h}</th>
-                  ))}</tr>
+                  <tr>{["Código", "Producto", "Departamento", ...(isAdmin ? ["Costo", "Margen"] : []), "Precio", "Stock", "Mín.", ""].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {products
-                    .filter(p => {
-                      const mq = !query || p.nombre?.toLowerCase().includes(query.toLowerCase());
-                      const ms = !filterStockBajo || (p.existencia <= p.stock_minimo && p.stock_minimo > 0);
-                      return mq && ms;
-                    })
-                    .map(p => {
-                      const margin = p.precio_venta > 0 ? ((p.precio_venta - p.precio_costo) / p.precio_venta * 100).toFixed(1) : 0;
-                      const isLow = p.existencia <= p.stock_minimo && p.stock_minimo > 0;
-                      return (
-                        <tr key={p.id} style={{ background: isLow ? "#fef9c3" : "transparent" }}>
-                          <td style={{ ...s.td, fontFamily: "monospace", fontSize: 11, color: "#9ca3af" }}>{p.codigo}</td>
-                          <td style={{ ...s.td, fontWeight: 600 }}>{p.nombre}</td>
-                          <td style={s.td}><span style={s.dept}>{p.departamento}</span></td>
-                          {isAdmin && <>
-                            <td style={{ ...s.td, color: "#6b7280" }}>{fmt(p.precio_costo)}</td>
-                            <td style={{ ...s.td, fontWeight: 700, color: parseFloat(margin) > 20 ? "#16a34a" : "#d97706" }}>{margin}%</td>
-                          </>}
-                          <td style={{ ...s.td, fontWeight: 700 }}>{fmt(p.precio_venta)}</td>
-                          <td style={s.td}>
-                            <span style={{ color: p.existencia <= 0 ? "#ef4444" : isLow ? "#f59e0b" : "#16a34a", fontWeight: 600 }}>
-                              {isLow && "⚠ "}{p.existencia}
-                            </span>
-                          </td>
-                          <td style={{ ...s.td, color: "#9ca3af" }}>{p.stock_minimo}</td>
-                          <td style={s.td}>
-                            <button style={s.editBtn} onClick={() => { setEditProduct(p); setShowAddProduct(true); }}>Editar</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  {products.filter(p => {
+                    const mq = !query || p.nombre?.toLowerCase().includes(query.toLowerCase());
+                    const ms = !filterStockBajo || (p.existencia <= p.stock_minimo && p.stock_minimo > 0);
+                    return mq && ms;
+                  }).map(p => {
+                    const margin = p.precio_venta > 0 ? ((p.precio_venta - p.precio_costo) / p.precio_venta * 100).toFixed(1) : 0;
+                    const isLow = p.existencia <= p.stock_minimo && p.stock_minimo > 0;
+                    return (
+                      <tr key={p.id} style={{ background: isLow ? "#fef9c3" : "transparent" }}>
+                        <td style={{ ...s.td, fontFamily: "monospace", fontSize: 11, color: "#9ca3af" }}>{p.codigo}</td>
+                        <td style={{ ...s.td, fontWeight: 600 }}>{p.nombre}</td>
+                        <td style={s.td}><span style={s.dept}>{p.departamento}</span></td>
+                        {isAdmin && <>
+                          <td style={{ ...s.td, color: "#6b7280" }}>{fmt(p.precio_costo)}</td>
+                          <td style={{ ...s.td, fontWeight: 700, color: parseFloat(margin) > 20 ? "#16a34a" : "#d97706" }}>{margin}%</td>
+                        </>}
+                        <td style={{ ...s.td, fontWeight: 700 }}>{fmt(p.precio_venta)}</td>
+                        <td style={s.td}><span style={{ color: p.existencia <= 0 ? "#ef4444" : isLow ? "#f59e0b" : "#16a34a", fontWeight: 600 }}>{isLow && "⚠ "}{p.existencia}</span></td>
+                        <td style={{ ...s.td, color: "#9ca3af" }}>{p.stock_minimo}</td>
+                        <td style={s.td}><button style={s.editBtn} onClick={() => { setEditProduct(p); setShowAddProduct(true); }}>Editar</button></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
-        {/* ── CAJA ── */}
-        {view === "caja" && (
-          <div style={s.cajaWrap}>
-            <div style={s.cajaGrid}>
-              {[
-                { label: "Ventas del día", value: fmt(totalVentas), color: "#16a34a" },
-                { label: "Transacciones", value: saleCount, color: "#2563eb" },
-                { label: "Ticket promedio", value: saleCount > 0 ? fmt(totalVentas / saleCount) : fmt(0), color: "#9333ea" },
-              ].map(({ label, value, color }) => (
-                <div key={label} style={{ ...s.kpiCard, borderColor: color + "33" }}>
-                  <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>{label}</div>
-                  <div style={{ color, fontSize: 26, fontWeight: 800 }}>{value}</div>
-                </div>
-              ))}
-            </div>
-            <div style={s.cajaNote}>
-              <Ico path={I.warn} size={16} />
-              <span>El módulo completo de cuadratura de caja se activa en la próxima etapa.</span>
-            </div>
-          </div>
-        )}
-
-        {/* ── REPORTES (solo admin) ── */}
+        {view === "caja" && <CierreCaja usuario={usuario} />}
         {view === "reportes" && isAdmin && (
           <div style={s.cajaWrap}>
-            <div style={s.cajaNote}>
-              <Ico path={I.chart} size={16} />
-              <span>Los reportes con gráficos y desglose de comisiones se activan en la próxima etapa.</span>
-            </div>
+            <div style={s.cajaNote}><Ico path={I.chart} size={16} /><span>Los reportes con gráficos y desglose de comisiones se activan en la próxima etapa.</span></div>
           </div>
         )}
-
-        {/* ── USUARIOS (solo admin) ── */}
         {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
-      {/* ── MODAL COBRO ── */}
       {payModal && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setPayModal(false)}>
           <div style={s.modal}>
@@ -481,9 +378,7 @@ export default function POSApp() {
               <button style={s.iconBtn} onClick={() => setPayModal(false)}><Ico path={I.x} size={18} /></button>
             </div>
             <div style={s.modalTotal}>{fmt(total)}</div>
-            <div style={{ textAlign: "center", color: "#6b7280", fontSize: 13, marginBottom: 20 }}>
-              {cart.length} producto{cart.length !== 1 ? "s" : ""}
-            </div>
+            <div style={{ textAlign: "center", color: "#6b7280", fontSize: 13, marginBottom: 20 }}>{cart.length} producto{cart.length !== 1 ? "s" : ""}</div>
             <div style={s.methods}>
               {[
                 { key: "efectivo", icon: I.cash, label: "Efectivo" },
@@ -492,25 +387,19 @@ export default function POSApp() {
                 { key: "transferencia", icon: I.transfer, label: "Transfer." },
                 { key: "fiado", icon: I.user, label: "Fiado" },
               ].map(({ key, icon, label }) => (
-                <button key={key}
-                  style={{ ...s.methodBtn, ...(payMethod === key ? s.methodActive : {}) }}
-                  onClick={() => setPayMethod(key)}>
-                  <Ico path={icon} size={18} />
-                  <span>{label}</span>
+                <button key={key} style={{ ...s.methodBtn, ...(payMethod === key ? s.methodActive : {}) }} onClick={() => setPayMethod(key)}>
+                  <Ico path={icon} size={18} /><span>{label}</span>
                 </button>
               ))}
             </div>
             {payMethod === "efectivo" && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Efectivo recibido</label>
-                <input style={s.cashField} type="number" placeholder="0"
-                  value={cashInput} onChange={e => setCashInput(e.target.value)} autoFocus />
+                <input style={s.cashField} type="number" placeholder="0" value={cashInput} onChange={e => setCashInput(e.target.value)} autoFocus />
                 {cashInput && (
                   <div style={s.changeRow}>
                     <span style={{ color: "#6b7280" }}>Vuelto:</span>
-                    <span style={{ color: change >= 0 ? "#16a34a" : "#ef4444", fontWeight: 800, fontSize: 22 }}>
-                      {fmt(Math.max(0, change))}
-                    </span>
+                    <span style={{ color: change >= 0 ? "#16a34a" : "#ef4444", fontWeight: 800, fontSize: 22 }}>{fmt(Math.max(0, change))}</span>
                   </div>
                 )}
               </div>
@@ -523,14 +412,12 @@ export default function POSApp() {
             {payMethod === "fiado" && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Nombre del cliente</label>
-                <input style={s.cashField} type="text" placeholder="Nombre de quien fía"
-                  value={fiadoNombre} onChange={e => setFiadoNombre(e.target.value)} autoFocus />
+                <input style={s.cashField} type="text" placeholder="Nombre de quien fía" value={fiadoNombre} onChange={e => setFiadoNombre(e.target.value)} autoFocus />
               </div>
             )}
             <div style={{ display: "flex", gap: 10 }}>
               <button style={s.cancelBtn} onClick={() => setPayModal(false)}>Cancelar</button>
-              <button
-                style={{ ...s.confirmBtn, opacity: (payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre) ? 0.4 : 1 }}
+              <button style={{ ...s.confirmBtn, opacity: (payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre) ? 0.4 : 1 }}
                 disabled={(payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre)}
                 onClick={() => completeSale()}>
                 <Ico path={I.check} size={18} /> Confirmar
@@ -540,7 +427,6 @@ export default function POSApp() {
         </div>
       )}
 
-      {/* ── MODAL VENTA RÁPIDA ── */}
       {showVentaRapida && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowVentaRapida(false)}>
           <div style={{ ...s.modal, maxWidth: 340 }}>
@@ -551,13 +437,11 @@ export default function POSApp() {
             <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>Para productos sin código o ventas de terceros.</p>
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, color: "#374151", fontWeight: 600, display: "block", marginBottom: 6 }}>Descripción (opcional)</label>
-              <input style={s.cashField} type="text" placeholder="Ej: Producto sin código..."
-                value={ventaRapidaDesc} onChange={e => setVentaRapidaDesc(e.target.value)} autoFocus />
+              <input style={s.cashField} type="text" placeholder="Ej: Producto sin código..." value={ventaRapidaDesc} onChange={e => setVentaRapidaDesc(e.target.value)} autoFocus />
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, color: "#374151", fontWeight: 600, display: "block", marginBottom: 6 }}>Monto ($)</label>
-              <input style={{ ...s.cashField, fontSize: 28 }} type="number" placeholder="0"
-                value={ventaRapidaMonto} onChange={e => setVentaRapidaMonto(e.target.value)} />
+              <input style={{ ...s.cashField, fontSize: 28 }} type="number" placeholder="0" value={ventaRapidaMonto} onChange={e => setVentaRapidaMonto(e.target.value)} />
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button style={s.cancelBtn} onClick={() => setShowVentaRapida(false)}>Cancelar</button>
@@ -571,17 +455,10 @@ export default function POSApp() {
         </div>
       )}
 
-      {showAddProduct && (
-        <AddProduct productToEdit={editProduct}
-          onClose={() => { setShowAddProduct(false); setEditProduct(null); }}
-          onSaved={loadProducts} />
-      )}
+      {showAddProduct && <AddProduct productToEdit={editProduct} onClose={() => { setShowAddProduct(false); setEditProduct(null); }} onSaved={loadProducts} />}
 
       {successMsg && (
-        <div style={s.successFlash}>
-          <Ico path={I.check} size={28} />
-          <span>{successMsg}</span>
-        </div>
+        <div style={s.successFlash}><Ico path={I.check} size={28} /><span>{successMsg}</span></div>
       )}
 
       <style>{`
@@ -602,8 +479,7 @@ const s = {
   root: { display: "flex", height: "100vh", fontFamily: "'Inter', sans-serif", background: "#f3f4f6", overflow: "hidden" },
   sidebar: { width: 210, background: "#111827", display: "flex", flexDirection: "column", padding: "0 0 0", flexShrink: 0 },
   logo: { display: "flex", alignItems: "center", gap: 10, padding: "20px 16px 24px", borderBottom: "1px solid #1f2937", marginBottom: 8 },
-  logoIcon: { fontSize: 28 },
-  logoName: { fontWeight: 800, fontSize: 14, color: "#f9fafb", letterSpacing: 0.5 },
+  logoIcon: { fontSize: 28 }, logoName: { fontWeight: 800, fontSize: 14, color: "#f9fafb", letterSpacing: 0.5 },
   logoSub: { fontSize: 10, color: "#6b7280", letterSpacing: 1, textTransform: "uppercase" },
   navBtn: { display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", background: "none", border: "none", color: "#9ca3af", fontSize: 13, fontWeight: 500, textAlign: "left", transition: "all .15s", borderLeft: "3px solid transparent" },
   navActive: { background: "#1f2937", color: "#f9fafb", borderLeftColor: "#22c55e" },
@@ -612,8 +488,7 @@ const s = {
   userAvatar: { width: 30, height: 30, borderRadius: "50%", background: "#1f2937", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#f9fafb", flexShrink: 0 },
   logoutBtn: { background: "none", border: "none", color: "#6b7280", display: "flex", alignItems: "center", cursor: "pointer", padding: 4 },
   statusBar: { display: "flex", alignItems: "center", gap: 8, padding: "10px 16px" },
-  dot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
-  statusTxt: { color: "#6b7280", fontSize: 12 },
+  dot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 }, statusTxt: { color: "#6b7280", fontSize: 12 },
   main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
   topbar: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", background: "#fff", borderBottom: "1px solid #e5e7eb", flexShrink: 0 },
   topDate: { fontSize: 13, color: "#374151", fontWeight: 600, textTransform: "capitalize" },
@@ -636,8 +511,7 @@ const s = {
   cardDept: { fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 },
   cardName: { fontSize: 13, fontWeight: 600, color: "#111827", lineHeight: 1.3 },
   cardFooter: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
-  cardPrice: { fontSize: 14, fontWeight: 800, color: "#16a34a" },
-  cardStock: { fontSize: 11 },
+  cardPrice: { fontSize: 14, fontWeight: 800, color: "#16a34a" }, cardStock: { fontSize: 11 },
   empty: { gridColumn: "1/-1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#d1d5db", paddingTop: 60 },
   center: { display: "flex", alignItems: "center", justifyContent: "center", flex: 1, color: "#9ca3af" },
   cartPanel: { width: 310, background: "#fff", borderLeft: "1px solid #e5e7eb", display: "flex", flexDirection: "column", flexShrink: 0 },
@@ -666,8 +540,6 @@ const s = {
   td: { padding: "11px 14px", borderBottom: "1px solid #f3f4f6", color: "#374151" },
   dept: { background: "#eff6ff", color: "#2563eb", borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 700 },
   cajaWrap: { flex: 1, overflowY: "auto", padding: 20 },
-  cajaGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 20 },
-  kpiCard: { background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "20px 24px" },
   cajaNote: { display: "flex", alignItems: "center", gap: 10, background: "#fefce8", border: "1px solid #fde047", borderRadius: 10, padding: "14px 18px", color: "#854d0e", fontSize: 13 },
   overlay: { position: "fixed", inset: 0, background: "#00000066", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 },
   modal: { background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px #0003" },
