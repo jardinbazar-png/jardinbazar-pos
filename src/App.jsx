@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════
-// JARDINBAZAR POS v2 — Con productos sin código,
-// venta rápida genérica, filtro stock bajo y
-// métodos de pago completos (débito, crédito, efectivo, fiado)
+// JARDINBAZAR POS v3 — Con login por PIN y usuarios
 // ═══════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import AddProduct from "./AddProduct.jsx";
+import Login from "./Login.jsx";
+import Usuarios from "./Usuarios.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -34,14 +34,16 @@ const I = {
   box: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
   chart: "M18 20V10M12 20V4M6 20v-6",
   warn: "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
-  menu: "M3 12h18M3 6h18M3 18h18",
   refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
   filter: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
   user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+  logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
 };
 
 export default function POSApp() {
+  const [usuario, setUsuario] = useState(null);
   const [view, setView] = useState("pos");
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
@@ -64,6 +66,8 @@ export default function POSApp() {
   const [fiadoNombre, setFiadoNombre] = useState("");
   const searchRef = useRef(null);
 
+  const isAdmin = usuario?.rol === "admin";
+
   const loadProducts = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.from("productos").select("*").eq("activo", true).order("nombre");
@@ -72,6 +76,7 @@ export default function POSApp() {
   }, []);
 
   useEffect(() => {
+    if (!usuario) return;
     loadProducts();
     const t = setInterval(() => setTime(fmtTime()), 1000);
     const onOnline = () => setOnline(true);
@@ -91,16 +96,18 @@ export default function POSApp() {
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("keydown", keys);
     };
-  }, [loadProducts, cart]);
+  }, [loadProducts, cart, usuario]);
 
   useEffect(() => {
+    if (!usuario) return;
     const channel = supabase.channel("productos-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, () => loadProducts())
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [loadProducts]);
+  }, [loadProducts, usuario]);
 
-  // Filtro con stock bajo opcional
+  if (!usuario) return <Login onLogin={(u) => { setUsuario(u); setView("pos"); }} />;
+
   const filtered = products.filter(p => {
     const matchQuery = query.length === 0 ||
       p.nombre?.toLowerCase().includes(query.toLowerCase()) ||
@@ -143,7 +150,6 @@ export default function POSApp() {
     if (ventaError) { alert("Error al registrar venta"); return; }
 
     if (montoExtra > 0) {
-      // Venta rápida sin productos
       await supabase.from("detalle_ventas").insert({
         venta_id: venta.id,
         producto_id: null,
@@ -183,6 +189,16 @@ export default function POSApp() {
 
   const stockBajoCount = products.filter(p => p.existencia <= p.stock_minimo && p.stock_minimo > 0).length;
 
+  const navItems = [
+    { key: "pos", icon: I.cart, label: "Punto de Venta" },
+    { key: "inventario", icon: I.box, label: "Inventario" },
+    { key: "caja", icon: I.cash, label: "Caja del Día" },
+    ...(isAdmin ? [
+      { key: "reportes", icon: I.chart, label: "Reportes" },
+      { key: "usuarios", icon: I.users, label: "Usuarios" },
+    ] : []),
+  ];
+
   return (
     <div style={s.root}>
       {/* SIDEBAR */}
@@ -194,23 +210,34 @@ export default function POSApp() {
             <div style={s.logoSub}>Sistema POS</div>
           </div>
         </div>
-        {[
-          { key: "pos", icon: I.cart, label: "Punto de Venta" },
-          { key: "inventario", icon: I.box, label: "Inventario" },
-          { key: "caja", icon: I.cash, label: "Caja del Día" },
-          { key: "reportes", icon: I.chart, label: "Reportes" },
-        ].map(({ key, icon, label }) => (
+
+        {navItems.map(({ key, icon, label }) => (
           <button key={key} style={{ ...s.navBtn, ...(view === key ? s.navActive : {}) }} onClick={() => setView(key)}>
             <Ico path={icon} size={16} />{label}
           </button>
         ))}
+
         <div style={{ flex: 1 }} />
+
         {stockBajoCount > 0 && (
           <div style={s.stockAlert}>
             <Ico path={I.warn} size={14} />
-            <span>{stockBajoCount} productos con stock bajo</span>
+            <span>{stockBajoCount} con stock bajo</span>
           </div>
         )}
+
+        {/* Usuario activo */}
+        <div style={s.userBar}>
+          <div style={s.userAvatar}>{usuario.nombre[0].toUpperCase()}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#f9fafb", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{usuario.nombre}</div>
+            <div style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase" }}>{usuario.rol}</div>
+          </div>
+          <button style={s.logoutBtn} onClick={() => { setUsuario(null); setCart([]); setView("pos"); }} title="Cerrar sesión">
+            <Ico path={I.logout} size={14} />
+          </button>
+        </div>
+
         <div style={s.statusBar}>
           <span style={{ ...s.dot, background: online ? "#22c55e" : "#ef4444" }} />
           <span style={s.statusTxt}>{online ? "En línea" : "Sin conexión"}</span>
@@ -232,7 +259,6 @@ export default function POSApp() {
         {view === "pos" && (
           <div style={s.posLayout}>
             <section style={s.prodPanel}>
-              {/* Barra de búsqueda + botones */}
               <div style={s.posToolbar}>
                 <div style={{ ...s.searchBox, flex: 1 }}>
                   <Ico path={I.search} size={16} />
@@ -329,6 +355,14 @@ export default function POSApp() {
               </div>
               <div style={s.totals}>
                 <div style={s.totalRow}><span style={{ color: "#6b7280" }}>Subtotal</span><span>{fmt(total)}</span></div>
+                {isAdmin && cart.length > 0 && (
+                  <div style={s.totalRow}>
+                    <span style={{ color: "#9ca3af", fontSize: 11 }}>Utilidad aprox.</span>
+                    <span style={{ color: "#16a34a", fontSize: 11, fontWeight: 700 }}>
+                      {fmt(cart.reduce((s, i) => s + (i.precio_venta - i.precio_costo) * i.qty, 0))}
+                    </span>
+                  </div>
+                )}
                 <div style={s.totalBig}><span>TOTAL</span><span>{fmt(total)}</span></div>
               </div>
               <button style={{ ...s.payBtn, opacity: cart.length === 0 ? 0.4 : 1 }}
@@ -360,7 +394,7 @@ export default function POSApp() {
             <div style={{ overflowY: "auto", flex: 1 }}>
               <table style={s.table}>
                 <thead>
-                  <tr>{["Código", "Producto", "Departamento", "Costo", "Precio", "Margen", "Stock", "Mín.", ""].map(h => (
+                  <tr>{["Código", "Producto", "Departamento", ...(isAdmin ? ["Costo", "Margen"] : []), "Precio", "Stock", "Mín.", ""].map(h => (
                     <th key={h} style={s.th}>{h}</th>
                   ))}</tr>
                 </thead>
@@ -379,9 +413,11 @@ export default function POSApp() {
                           <td style={{ ...s.td, fontFamily: "monospace", fontSize: 11, color: "#9ca3af" }}>{p.codigo}</td>
                           <td style={{ ...s.td, fontWeight: 600 }}>{p.nombre}</td>
                           <td style={s.td}><span style={s.dept}>{p.departamento}</span></td>
-                          <td style={{ ...s.td, color: "#6b7280" }}>{fmt(p.precio_costo)}</td>
+                          {isAdmin && <>
+                            <td style={{ ...s.td, color: "#6b7280" }}>{fmt(p.precio_costo)}</td>
+                            <td style={{ ...s.td, fontWeight: 700, color: parseFloat(margin) > 20 ? "#16a34a" : "#d97706" }}>{margin}%</td>
+                          </>}
                           <td style={{ ...s.td, fontWeight: 700 }}>{fmt(p.precio_venta)}</td>
-                          <td style={{ ...s.td, fontWeight: 700, color: parseFloat(margin) > 20 ? "#16a34a" : "#d97706" }}>{margin}%</td>
                           <td style={s.td}>
                             <span style={{ color: p.existencia <= 0 ? "#ef4444" : isLow ? "#f59e0b" : "#16a34a", fontWeight: 600 }}>
                               {isLow && "⚠ "}{p.existencia}
@@ -422,15 +458,18 @@ export default function POSApp() {
           </div>
         )}
 
-        {/* ── REPORTES ── */}
-        {view === "reportes" && (
+        {/* ── REPORTES (solo admin) ── */}
+        {view === "reportes" && isAdmin && (
           <div style={s.cajaWrap}>
             <div style={s.cajaNote}>
               <Ico path={I.chart} size={16} />
-              <span>Los reportes con gráficos y desglose de comisiones por tarjeta se activan en la próxima etapa.</span>
+              <span>Los reportes con gráficos y desglose de comisiones se activan en la próxima etapa.</span>
             </div>
           </div>
         )}
+
+        {/* ── USUARIOS (solo admin) ── */}
+        {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
       {/* ── MODAL COBRO ── */}
@@ -445,14 +484,12 @@ export default function POSApp() {
             <div style={{ textAlign: "center", color: "#6b7280", fontSize: 13, marginBottom: 20 }}>
               {cart.length} producto{cart.length !== 1 ? "s" : ""}
             </div>
-
-            {/* MÉTODOS DE PAGO */}
             <div style={s.methods}>
               {[
                 { key: "efectivo", icon: I.cash, label: "Efectivo" },
                 { key: "debito", icon: I.card, label: "Débito" },
                 { key: "credito", icon: I.card, label: "Crédito" },
-                { key: "transferencia", icon: I.transfer, label: "Transferencia" },
+                { key: "transferencia", icon: I.transfer, label: "Transfer." },
                 { key: "fiado", icon: I.user, label: "Fiado" },
               ].map(({ key, icon, label }) => (
                 <button key={key}
@@ -463,7 +500,6 @@ export default function POSApp() {
                 </button>
               ))}
             </div>
-
             {payMethod === "efectivo" && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Efectivo recibido</label>
@@ -479,13 +515,11 @@ export default function POSApp() {
                 )}
               </div>
             )}
-
             {(payMethod === "debito" || payMethod === "credito") && (
               <div style={{ marginBottom: 16, background: "#eff6ff", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2563eb" }}>
-                ℹ️ La comisión por {payMethod} se descontará automáticamente en los reportes de ganancia.
+                ℹ️ La comisión por {payMethod} se descontará en los reportes de ganancia.
               </div>
             )}
-
             {payMethod === "fiado" && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Nombre del cliente</label>
@@ -493,7 +527,6 @@ export default function POSApp() {
                   value={fiadoNombre} onChange={e => setFiadoNombre(e.target.value)} autoFocus />
               </div>
             )}
-
             <div style={{ display: "flex", gap: 10 }}>
               <button style={s.cancelBtn} onClick={() => setPayModal(false)}>Cancelar</button>
               <button
@@ -515,12 +548,10 @@ export default function POSApp() {
               <span style={{ fontWeight: 700, fontSize: 16 }}>⚡ Venta rápida sin código</span>
               <button style={s.iconBtn} onClick={() => setShowVentaRapida(false)}><Ico path={I.x} size={18} /></button>
             </div>
-            <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>
-              Para productos sin código de barra o ventas de terceros.
-            </p>
+            <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>Para productos sin código o ventas de terceros.</p>
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, color: "#374151", fontWeight: 600, display: "block", marginBottom: 6 }}>Descripción (opcional)</label>
-              <input style={s.cashField} type="text" placeholder="Ej: Producto sin código, venta terceros..."
+              <input style={s.cashField} type="text" placeholder="Ej: Producto sin código..."
                 value={ventaRapidaDesc} onChange={e => setVentaRapidaDesc(e.target.value)} autoFocus />
             </div>
             <div style={{ marginBottom: 16 }}>
@@ -533,7 +564,7 @@ export default function POSApp() {
               <button style={{ ...s.confirmBtn, opacity: !ventaRapidaMonto || parseFloat(ventaRapidaMonto) <= 0 ? 0.4 : 1 }}
                 disabled={!ventaRapidaMonto || parseFloat(ventaRapidaMonto) <= 0}
                 onClick={() => completeSale(parseFloat(ventaRapidaMonto), ventaRapidaDesc)}>
-                <Ico path={I.check} size={18} /> Registrar venta
+                <Ico path={I.check} size={18} /> Registrar
               </button>
             </div>
           </div>
@@ -569,7 +600,7 @@ export default function POSApp() {
 
 const s = {
   root: { display: "flex", height: "100vh", fontFamily: "'Inter', sans-serif", background: "#f3f4f6", overflow: "hidden" },
-  sidebar: { width: 210, background: "#111827", display: "flex", flexDirection: "column", padding: "0 0 16px", flexShrink: 0 },
+  sidebar: { width: 210, background: "#111827", display: "flex", flexDirection: "column", padding: "0 0 0", flexShrink: 0 },
   logo: { display: "flex", alignItems: "center", gap: 10, padding: "20px 16px 24px", borderBottom: "1px solid #1f2937", marginBottom: 8 },
   logoIcon: { fontSize: 28 },
   logoName: { fontWeight: 800, fontSize: 14, color: "#f9fafb", letterSpacing: 0.5 },
@@ -577,7 +608,10 @@ const s = {
   navBtn: { display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", background: "none", border: "none", color: "#9ca3af", fontSize: 13, fontWeight: 500, textAlign: "left", transition: "all .15s", borderLeft: "3px solid transparent" },
   navActive: { background: "#1f2937", color: "#f9fafb", borderLeftColor: "#22c55e" },
   stockAlert: { display: "flex", alignItems: "center", gap: 6, margin: "0 12px 8px", padding: "8px 10px", background: "#fef3c7", borderRadius: 6, color: "#d97706", fontSize: 11, fontWeight: 600 },
-  statusBar: { display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderTop: "1px solid #1f2937" },
+  userBar: { display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", borderTop: "1px solid #1f2937", borderBottom: "1px solid #1f2937" },
+  userAvatar: { width: 30, height: 30, borderRadius: "50%", background: "#1f2937", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#f9fafb", flexShrink: 0 },
+  logoutBtn: { background: "none", border: "none", color: "#6b7280", display: "flex", alignItems: "center", cursor: "pointer", padding: 4 },
+  statusBar: { display: "flex", alignItems: "center", gap: 8, padding: "10px 16px" },
   dot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
   statusTxt: { color: "#6b7280", fontSize: 12 },
   main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
