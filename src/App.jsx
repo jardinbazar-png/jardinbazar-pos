@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import AddProduct from "./AddProduct.jsx";
 import Login from "./Login.jsx";
-import Usuarios from "./Usuarios_v2.jsx";
+import Usuarios from "./Usuarios.jsx";
 import CierreCaja from "./CierreCaja.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
