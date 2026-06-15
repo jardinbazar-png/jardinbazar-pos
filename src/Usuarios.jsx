@@ -9,6 +9,7 @@ const supabase = createClient(
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nombre: "", pin: "", rol: "cajero" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -20,32 +21,45 @@ export default function Usuarios() {
 
   useEffect(() => { load(); }, []);
 
+  const abrirEditar = (u) => {
+    setEditando(u);
+    setForm({ nombre: u.nombre, pin: "", rol: u.rol });
+    setShowForm(true);
+    setError("");
+  };
+
+  const abrirNuevo = () => {
+    setEditando(null);
+    setForm({ nombre: "", pin: "", rol: "cajero" });
+    setShowForm(true);
+    setError("");
+  };
+
   const save = async () => {
     if (!form.nombre) { setError("Ingresa un nombre"); return; }
-    if (form.pin.length !== 4 || isNaN(form.pin)) { setError("El PIN debe ser de 4 números"); return; }
+    if (!editando && (form.pin.length !== 4 || isNaN(form.pin))) { setError("El PIN debe ser de 4 números"); return; }
+    if (form.pin && (form.pin.length !== 4 || isNaN(form.pin))) { setError("El PIN debe ser de 4 números"); return; }
     setSaving(true);
-    const { error: err } = await supabase.from("usuarios").insert({
-      nombre: form.nombre,
-      pin: form.pin,
-      rol: form.rol,
-      activo: true,
-    });
+
+    let err;
+    if (editando) {
+      const updates = { nombre: form.nombre, rol: form.rol };
+      if (form.pin) updates.pin = form.pin;
+      ({ error: err } = await supabase.from("usuarios").update(updates).eq("id", editando.id));
+    } else {
+      ({ error: err } = await supabase.from("usuarios").insert({ nombre: form.nombre, pin: form.pin, rol: form.rol, activo: true }));
+    }
+
     setSaving(false);
     if (err) { setError("Error: " + err.message); return; }
-    setForm({ nombre: "", pin: "", rol: "cajero" });
     setShowForm(false);
+    setEditando(null);
     setError("");
     load();
   };
 
   const toggleActivo = async (u) => {
     await supabase.from("usuarios").update({ activo: !u.activo }).eq("id", u.id);
-    load();
-  };
-
-  const cambiarRol = async (u) => {
-    const nuevoRol = u.rol === "admin" ? "cajero" : "admin";
-    await supabase.from("usuarios").update({ rol: nuevoRol }).eq("id", u.id);
     load();
   };
 
@@ -56,7 +70,7 @@ export default function Usuarios() {
           <div style={s.title}>👥 Usuarios del sistema</div>
           <div style={s.subtitle}>Solo los admins pueden ver esta pantalla</div>
         </div>
-        <button style={s.addBtn} onClick={() => setShowForm(true)}>+ Agregar usuario</button>
+        <button style={s.addBtn} onClick={abrirNuevo}>+ Agregar usuario</button>
       </div>
 
       <div style={s.list}>
@@ -65,15 +79,15 @@ export default function Usuarios() {
             <div style={s.avatar}>{u.nombre[0].toUpperCase()}</div>
             <div style={{ flex: 1 }}>
               <div style={s.userName}>{u.nombre}</div>
-              <div style={s.userMeta}>PIN: {"●".repeat(4)} · Creado: {new Date(u.creado_at).toLocaleDateString("es-CL")}</div>
+              <div style={s.userMeta}>
+                PIN: {"●".repeat(4)} · {u.activo ? "Activo" : "Inactivo"} · Creado: {new Date(u.creado_at).toLocaleDateString("es-CL")}
+              </div>
             </div>
             <span style={{ ...s.rolBadge, background: u.rol === "admin" ? "#eff6ff" : "#f0fdf4", color: u.rol === "admin" ? "#2563eb" : "#16a34a" }}>
               {u.rol}
             </span>
             <div style={s.actions}>
-              <button style={s.actionBtn} onClick={() => cambiarRol(u)}>
-                {u.rol === "admin" ? "→ Cajero" : "→ Admin"}
-              </button>
+              <button style={s.actionBtn} onClick={() => abrirEditar(u)}>✏️ Editar</button>
               <button style={{ ...s.actionBtn, color: u.activo ? "#ef4444" : "#16a34a" }} onClick={() => toggleActivo(u)}>
                 {u.activo ? "Desactivar" : "Activar"}
               </button>
@@ -86,7 +100,7 @@ export default function Usuarios() {
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div style={s.modal}>
             <div style={s.modalHeader}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Agregar usuario</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>{editando ? "Editar usuario" : "Agregar usuario"}</span>
               <button style={s.closeBtn} onClick={() => setShowForm(false)}>✕</button>
             </div>
 
@@ -97,8 +111,10 @@ export default function Usuarios() {
             </div>
 
             <div style={s.field}>
-              <label style={s.label}>PIN (4 números)</label>
-              <input style={s.input} type="number" placeholder="Ej: 1234" maxLength={4}
+              <label style={s.label}>
+                PIN (4 números){editando ? " — deja vacío para no cambiar" : ""}
+              </label>
+              <input style={s.input} type="number" placeholder={editando ? "Nuevo PIN (opcional)" : "Ej: 1234"}
                 value={form.pin} onChange={e => setForm(p => ({ ...p, pin: e.target.value.slice(0, 4) }))} />
             </div>
 
@@ -117,7 +133,7 @@ export default function Usuarios() {
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
               <button style={s.cancelBtn} onClick={() => setShowForm(false)}>Cancelar</button>
               <button style={s.saveBtn} onClick={save} disabled={saving}>
-                {saving ? "Guardando..." : "✓ Crear usuario"}
+                {saving ? "Guardando..." : editando ? "✓ Guardar cambios" : "✓ Crear usuario"}
               </button>
             </div>
           </div>
