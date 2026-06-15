@@ -1,10 +1,11 @@
-// JARDINBAZAR POS v4 — Con CierreCaja y Usuarios editables
+// JARDINBAZAR POS v5 — Turnos, multiticket y duplicar productos
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import AddProduct from "./AddProduct.jsx";
 import Login from "./Login.jsx";
 import Usuarios from "./Usuarios.jsx";
 import CierreCaja from "./CierreCaja.jsx";
+import Turnos from "./Turnos.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -39,13 +40,17 @@ const I = {
   user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
   logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+  clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
+  copy: "M20 9H11a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
 };
 
 export default function POSApp() {
   const [usuario, setUsuario] = useState(null);
   const [view, setView] = useState("pos");
   const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState([]);
+  // MULTITICKET: array de tickets, ticketActivo es el índice
+  const [tickets, setTickets] = useState([{ id: 1, nombre: "Ticket 1", cart: [] }]);
+  const [ticketActivo, setTicketActivo] = useState(0);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [payModal, setPayModal] = useState(false);
@@ -63,8 +68,28 @@ export default function POSApp() {
   const [ventaRapidaMonto, setVentaRapidaMonto] = useState("");
   const [ventaRapidaDesc, setVentaRapidaDesc] = useState("");
   const [fiadoNombre, setFiadoNombre] = useState("");
+  const [showDuplicar, setShowDuplicar] = useState(false);
+  const [productoADuplicar, setProductoADuplicar] = useState(null);
   const searchRef = useRef(null);
   const isAdmin = usuario?.rol === "admin";
+
+  // Carrito del ticket activo
+  const cart = tickets[ticketActivo]?.cart || [];
+  const setCart = (fn) => {
+    setTickets(prev => prev.map((t, i) => i === ticketActivo ? { ...t, cart: typeof fn === "function" ? fn(t.cart) : fn } : t));
+  };
+
+  const agregarTicket = () => {
+    const nuevoId = tickets.length + 1;
+    setTickets(prev => [...prev, { id: nuevoId, nombre: `Ticket ${nuevoId}`, cart: [] }]);
+    setTicketActivo(tickets.length);
+  };
+
+  const cerrarTicket = (idx) => {
+    if (tickets.length === 1) return;
+    setTickets(prev => prev.filter((_, i) => i !== idx));
+    setTicketActivo(Math.max(0, ticketActivo - 1));
+  };
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -85,7 +110,8 @@ export default function POSApp() {
       if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "F4" && cart.length > 0) { e.preventDefault(); setPayModal(true); }
       if (e.key === "F3") { e.preventDefault(); setShowVentaRapida(true); }
-      if (e.key === "Escape") { setPayModal(false); setShowVentaRapida(false); }
+      if (e.key === "F5") { e.preventDefault(); agregarTicket(); }
+      if (e.key === "Escape") { setPayModal(false); setShowVentaRapida(false); setShowDuplicar(false); }
     };
     window.addEventListener("keydown", keys);
     return () => {
@@ -162,11 +188,30 @@ export default function POSApp() {
     }
     setSaleCount(n => n + 1);
     setTotalVentas(n => n + totalFinal);
-    setCart([]); setPayModal(false); setShowVentaRapida(false);
+    setCart([]);
+    setPayModal(false); setShowVentaRapida(false);
     setCashInput(""); setFiadoNombre(""); setVentaRapidaMonto(""); setVentaRapidaDesc("");
     setSuccessMsg(`¡Venta registrada! ${fmt(totalFinal)}`);
     setTimeout(() => setSuccessMsg(""), 2500);
     loadProducts();
+  };
+
+  // DUPLICAR PRODUCTO
+  const duplicarProducto = async (p, nuevoNombre, nuevoCodigo) => {
+    const { error } = await supabase.from("productos").insert({
+      codigo: nuevoCodigo || `DUP${Date.now()}`,
+      nombre: nuevoNombre,
+      departamento: p.departamento,
+      precio_costo: p.precio_costo,
+      precio_venta: p.precio_venta,
+      precio_mayoreo: p.precio_mayoreo,
+      existencia: 0,
+      stock_minimo: p.stock_minimo,
+      stock_maximo: p.stock_maximo,
+      iva: p.iva,
+      activo: true,
+    });
+    if (!error) { loadProducts(); setShowDuplicar(false); setProductoADuplicar(null); setSuccessMsg("Producto duplicado"); setTimeout(() => setSuccessMsg(""), 2000); }
   };
 
   const stockBajoCount = products.filter(p => p.existencia <= p.stock_minimo && p.stock_minimo > 0).length;
@@ -175,6 +220,7 @@ export default function POSApp() {
     { key: "pos", icon: I.cart, label: "Punto de Venta" },
     { key: "inventario", icon: I.box, label: "Inventario" },
     { key: "caja", icon: I.cash, label: "Caja del Día" },
+    { key: "turnos", icon: I.clock, label: "Turnos" },
     ...(isAdmin ? [
       { key: "reportes", icon: I.chart, label: "Reportes" },
       { key: "usuarios", icon: I.users, label: "Usuarios" },
@@ -197,16 +243,14 @@ export default function POSApp() {
           </button>
         ))}
         <div style={{ flex: 1 }} />
-        {stockBajoCount > 0 && (
-          <div style={s.stockAlert}><Ico path={I.warn} size={14} /><span>{stockBajoCount} con stock bajo</span></div>
-        )}
+        {stockBajoCount > 0 && <div style={s.stockAlert}><Ico path={I.warn} size={14} /><span>{stockBajoCount} con stock bajo</span></div>}
         <div style={s.userBar}>
           <div style={s.userAvatar}>{usuario.nombre[0].toUpperCase()}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#f9fafb", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{usuario.nombre}</div>
             <div style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase" }}>{usuario.rol}</div>
           </div>
-          <button style={s.logoutBtn} onClick={() => { setUsuario(null); setCart([]); setView("pos"); }} title="Cerrar sesión">
+          <button style={s.logoutBtn} onClick={() => { setUsuario(null); setTickets([{ id: 1, nombre: "Ticket 1", cart: [] }]); setTicketActivo(0); setView("pos"); }} title="Cerrar sesión">
             <Ico path={I.logout} size={14} />
           </button>
         </div>
@@ -229,6 +273,21 @@ export default function POSApp() {
         {view === "pos" && (
           <div style={s.posLayout}>
             <section style={s.prodPanel}>
+              {/* TABS MULTITICKET */}
+              <div style={s.ticketTabs}>
+                {tickets.map((t, idx) => (
+                  <div key={t.id} style={{ ...s.ticketTab, ...(idx === ticketActivo ? s.ticketTabActive : {}) }}>
+                    <button style={s.ticketTabBtn} onClick={() => setTicketActivo(idx)}>
+                      {t.nombre} {t.cart.length > 0 && <span style={s.ticketBadge}>{t.cart.length}</span>}
+                    </button>
+                    {tickets.length > 1 && (
+                      <button style={s.ticketClose} onClick={() => cerrarTicket(idx)}>×</button>
+                    )}
+                  </div>
+                ))}
+                <button style={s.ticketAdd} onClick={agregarTicket} title="Nuevo ticket [F5]">+ [F5]</button>
+              </div>
+
               <div style={s.posToolbar}>
                 <div style={{ ...s.searchBox, flex: 1 }}>
                   <Ico path={I.search} size={16} />
@@ -250,6 +309,7 @@ export default function POSApp() {
                   <Ico path={I.zap} size={14} />Venta rápida [F3]
                 </button>
               </div>
+
               {loading ? <div style={s.center}>Cargando productos...</div> : (
                 <div style={s.grid}>
                   {filtered.slice(0, 60).map(p => (
@@ -272,14 +332,15 @@ export default function POSApp() {
                 </div>
               )}
             </section>
+
             <section style={s.cartPanel}>
               <div style={s.cartHeader}>
                 <Ico path={I.cart} size={16} />
-                <span style={{ fontWeight: 700 }}>Ticket</span>
+                <span style={{ fontWeight: 700 }}>{tickets[ticketActivo]?.nombre}</span>
                 {cart.length > 0 && <button style={s.clearCart} onClick={() => setCart([])}>Limpiar</button>}
               </div>
               <div style={s.cartItems}>
-                {cart.length === 0 && <div style={s.emptyCart}><Ico path={I.cart} size={36} /><p>Escanea o selecciona productos</p><p style={{ fontSize: 11, color: "#d1d5db" }}>F3 para venta rápida sin código</p></div>}
+                {cart.length === 0 && <div style={s.emptyCart}><Ico path={I.cart} size={36} /><p>Escanea o selecciona productos</p><p style={{ fontSize: 11, color: "#d1d5db" }}>F3 venta rápida · F5 nuevo ticket</p></div>}
                 {cart.map(item => (
                   <div key={item.id} style={s.cartItem}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -351,7 +412,14 @@ export default function POSApp() {
                         <td style={{ ...s.td, fontWeight: 700 }}>{fmt(p.precio_venta)}</td>
                         <td style={s.td}><span style={{ color: p.existencia <= 0 ? "#ef4444" : isLow ? "#f59e0b" : "#16a34a", fontWeight: 600 }}>{isLow && "⚠ "}{p.existencia}</span></td>
                         <td style={{ ...s.td, color: "#9ca3af" }}>{p.stock_minimo}</td>
-                        <td style={s.td}><button style={s.editBtn} onClick={() => { setEditProduct(p); setShowAddProduct(true); }}>Editar</button></td>
+                        <td style={s.td}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button style={s.editBtn} onClick={() => { setEditProduct(p); setShowAddProduct(true); }}>Editar</button>
+                            <button style={{ ...s.editBtn, color: "#2563eb" }} onClick={() => { setProductoADuplicar(p); setShowDuplicar(true); }} title="Duplicar producto">
+                              <Ico path={I.copy} size={11} />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -362,6 +430,7 @@ export default function POSApp() {
         )}
 
         {view === "caja" && <CierreCaja usuario={usuario} />}
+        {view === "turnos" && <Turnos usuario={usuario} />}
         {view === "reportes" && isAdmin && (
           <div style={s.cajaWrap}>
             <div style={s.cajaNote}><Ico path={I.chart} size={16} /><span>Los reportes con gráficos y desglose de comisiones se activan en la próxima etapa.</span></div>
@@ -370,11 +439,12 @@ export default function POSApp() {
         {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
+      {/* MODAL COBRO */}
       {payModal && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setPayModal(false)}>
           <div style={s.modal}>
             <div style={s.modalHeader}>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>Cobrar venta</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Cobrar — {tickets[ticketActivo]?.nombre}</span>
               <button style={s.iconBtn} onClick={() => setPayModal(false)}><Ico path={I.x} size={18} /></button>
             </div>
             <div style={s.modalTotal}>{fmt(total)}</div>
@@ -396,12 +466,7 @@ export default function POSApp() {
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Efectivo recibido</label>
                 <input style={s.cashField} type="number" placeholder="0" value={cashInput} onChange={e => setCashInput(e.target.value)} autoFocus />
-                {cashInput && (
-                  <div style={s.changeRow}>
-                    <span style={{ color: "#6b7280" }}>Vuelto:</span>
-                    <span style={{ color: change >= 0 ? "#16a34a" : "#ef4444", fontWeight: 800, fontSize: 22 }}>{fmt(Math.max(0, change))}</span>
-                  </div>
-                )}
+                {cashInput && <div style={s.changeRow}><span style={{ color: "#6b7280" }}>Vuelto:</span><span style={{ color: change >= 0 ? "#16a34a" : "#ef4444", fontWeight: 800, fontSize: 22 }}>{fmt(Math.max(0, change))}</span></div>}
               </div>
             )}
             {(payMethod === "debito" || payMethod === "credito") && (
@@ -427,6 +492,7 @@ export default function POSApp() {
         </div>
       )}
 
+      {/* MODAL VENTA RÁPIDA */}
       {showVentaRapida && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowVentaRapida(false)}>
           <div style={{ ...s.modal, maxWidth: 340 }}>
@@ -434,7 +500,6 @@ export default function POSApp() {
               <span style={{ fontWeight: 700, fontSize: 16 }}>⚡ Venta rápida sin código</span>
               <button style={s.iconBtn} onClick={() => setShowVentaRapida(false)}><Ico path={I.x} size={18} /></button>
             </div>
-            <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>Para productos sin código o ventas de terceros.</p>
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, color: "#374151", fontWeight: 600, display: "block", marginBottom: 6 }}>Descripción (opcional)</label>
               <input style={s.cashField} type="text" placeholder="Ej: Producto sin código..." value={ventaRapidaDesc} onChange={e => setVentaRapidaDesc(e.target.value)} autoFocus />
@@ -455,11 +520,18 @@ export default function POSApp() {
         </div>
       )}
 
+      {/* MODAL DUPLICAR PRODUCTO */}
+      {showDuplicar && productoADuplicar && (
+        <DuplicarModal
+          producto={productoADuplicar}
+          onDuplicar={duplicarProducto}
+          onClose={() => { setShowDuplicar(false); setProductoADuplicar(null); }}
+        />
+      )}
+
       {showAddProduct && <AddProduct productToEdit={editProduct} onClose={() => { setShowAddProduct(false); setEditProduct(null); }} onSaved={loadProducts} />}
 
-      {successMsg && (
-        <div style={s.successFlash}><Ico path={I.check} size={28} /><span>{successMsg}</span></div>
-      )}
+      {successMsg && <div style={s.successFlash}><Ico path={I.check} size={28} /><span>{successMsg}</span></div>}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -475,9 +547,48 @@ export default function POSApp() {
   );
 }
 
+// ── MODAL DUPLICAR ──
+function DuplicarModal({ producto, onDuplicar, onClose }) {
+  const [nombre, setNombre] = useState(producto.nombre + " (copia)");
+  const [codigo, setCodigo] = useState("");
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#00000066", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 380, boxShadow: "0 20px 60px #0003" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <span style={{ fontWeight: 700, fontSize: 16 }}>Duplicar producto</span>
+          <button style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#9ca3af" }} onClick={onClose}>✕</button>
+        </div>
+        <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>
+          Se copiará <strong>{producto.nombre}</strong> con los mismos precios. Stock quedará en 0.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 5 }}>Nombre del nuevo producto</label>
+            <input style={{ width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", fontSize: 14, outline: "none", background: "#f9fafb" }}
+              value={nombre} onChange={e => setNombre(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 5 }}>Código de barra (opcional — escanea o escribe)</label>
+            <input style={{ width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", fontSize: 14, outline: "none", background: "#f9fafb", fontFamily: "monospace" }}
+              placeholder="Escanea el código del nuevo producto" value={codigo} onChange={e => setCodigo(e.target.value)} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button style={{ flex: 1, padding: 13, background: "none", border: "1.5px solid #e5e7eb", borderRadius: 8, color: "#6b7280", fontSize: 14, fontWeight: 600 }} onClick={onClose}>Cancelar</button>
+          <button style={{ flex: 2, padding: 13, background: "#16a34a", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 800 }}
+            onClick={() => onDuplicar(producto, nombre, codigo)}>
+            ✓ Duplicar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const s = {
   root: { display: "flex", height: "100vh", fontFamily: "'Inter', sans-serif", background: "#f3f4f6", overflow: "hidden" },
-  sidebar: { width: 210, background: "#111827", display: "flex", flexDirection: "column", padding: "0 0 0", flexShrink: 0 },
+  sidebar: { width: 210, background: "#111827", display: "flex", flexDirection: "column", padding: "0", flexShrink: 0 },
   logo: { display: "flex", alignItems: "center", gap: 10, padding: "20px 16px 24px", borderBottom: "1px solid #1f2937", marginBottom: 8 },
   logoIcon: { fontSize: 28 }, logoName: { fontWeight: 800, fontSize: 14, color: "#f9fafb", letterSpacing: 0.5 },
   logoSub: { fontSize: 10, color: "#6b7280", letterSpacing: 1, textTransform: "uppercase" },
@@ -498,7 +609,14 @@ const s = {
   kpiVal: { fontSize: 15, fontWeight: 800, color: "#111827" },
   clock: { fontSize: 20, fontWeight: 800, color: "#111827", fontVariantNumeric: "tabular-nums" },
   posLayout: { display: "flex", flex: 1, overflow: "hidden" },
-  prodPanel: { flex: 1, display: "flex", flexDirection: "column", padding: 16, overflow: "hidden" },
+  prodPanel: { flex: 1, display: "flex", flexDirection: "column", padding: "0 16px 16px", overflow: "hidden" },
+  ticketTabs: { display: "flex", gap: 4, padding: "10px 0 6px", flexShrink: 0, overflowX: "auto" },
+  ticketTab: { display: "flex", alignItems: "center", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, overflow: "hidden" },
+  ticketTabActive: { background: "#f0fdf4", borderColor: "#16a34a" },
+  ticketTabBtn: { padding: "6px 12px", background: "none", border: "none", fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 },
+  ticketBadge: { background: "#16a34a", color: "#fff", borderRadius: 10, padding: "1px 6px", fontSize: 10, fontWeight: 700 },
+  ticketClose: { padding: "4px 8px", background: "none", border: "none", color: "#9ca3af", fontSize: 14, cursor: "pointer" },
+  ticketAdd: { padding: "6px 10px", background: "#f9fafb", border: "1.5px dashed #d1d5db", borderRadius: 8, fontSize: 11, fontWeight: 700, color: "#6b7280", cursor: "pointer", flexShrink: 0 },
   posToolbar: { display: "flex", gap: 10, marginBottom: 14, flexShrink: 0, flexWrap: "wrap" },
   searchBox: { display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", color: "#9ca3af" },
   searchInput: { flex: 1, border: "none", outline: "none", padding: "11px 0", fontSize: 14, color: "#111827", background: "transparent" },
@@ -534,7 +652,7 @@ const s = {
   toolbar: { display: "flex", gap: 12, marginBottom: 16, alignItems: "center", flexWrap: "wrap" },
   addBtn: { padding: "8px 14px", background: "#16a34a", border: "none", borderRadius: 6, color: "#fff", fontSize: 13, fontWeight: 700 },
   reloadBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 6, color: "#374151", fontSize: 13, fontWeight: 600 },
-  editBtn: { background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 10px", fontSize: 11, color: "#374151", fontWeight: 600 },
+  editBtn: { background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 8px", fontSize: 11, color: "#374151", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13, background: "#fff", borderRadius: 10, overflow: "hidden" },
   th: { padding: "10px 14px", textAlign: "left", color: "#6b7280", fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", borderBottom: "1px solid #e5e7eb", background: "#f9fafb", position: "sticky", top: 0 },
   td: { padding: "11px 14px", borderBottom: "1px solid #f3f4f6", color: "#374151" },
