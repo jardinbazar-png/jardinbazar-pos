@@ -11,8 +11,8 @@ const TIPOS_VENTA = ["Unidad","Pieza","Gramo","Kilo","Litro","Paquete","Granel"]
 
 const fmt = n => new Intl.NumberFormat("es-CL", { style:"currency", currency:"CLP" }).format(n||0);
 
-export default function AddProduct({ onClose, onSaved, productToEdit }) {
-  const isEdit = !!productToEdit;
+export default function AddProduct({ onClose, onSaved, productToEdit, isDuplicate = false }) {
+  const isEdit = !!productToEdit && !isDuplicate;
   const codigoRef = useRef(null);
 
   const calcPrecioVenta = (costo, pct, tieneIva) => {
@@ -32,7 +32,7 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
   };
 
   const [form, setForm] = useState({
-    codigo: productToEdit?.codigo || "",
+    codigo: isDuplicate ? "" : (productToEdit?.codigo || ""),
     nombre: productToEdit?.nombre || "",
     tipo_venta: productToEdit?.tipo_venta || "Unidad",
     precio_costo_sin_iva: productToEdit?.precio_costo || 0,
@@ -48,33 +48,28 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
     stock_maximo: productToEdit?.stock_maximo || 0,
   });
 
-  const [lastEdited, setLastEdited] = useState("pct"); // "pct" o "precio"
+  const [lastEdited, setLastEdited] = useState("pct");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const handleChange = (key, val) => {
     setForm(prev => {
       const next = { ...prev, [key]: val };
-
       if (key === "precio_costo_sin_iva" || key === "tiene_iva") {
-        // Recalcular según lo que el usuario editó último
         if (lastEdited === "pct") {
           next.precio_venta = calcPrecioVenta(next.precio_costo_sin_iva, next.porcentaje_ganancia, next.tiene_iva);
         } else {
           next.porcentaje_ganancia = calcPorcentaje(next.precio_costo_sin_iva, next.precio_venta, next.tiene_iva);
         }
       }
-
       if (key === "porcentaje_ganancia") {
         setLastEdited("pct");
         next.precio_venta = calcPrecioVenta(next.precio_costo_sin_iva, val, next.tiene_iva);
       }
-
       if (key === "precio_venta") {
         setLastEdited("precio");
         next.porcentaje_ganancia = calcPorcentaje(next.precio_costo_sin_iva, val, next.tiene_iva);
       }
-
       return next;
     });
   };
@@ -124,12 +119,11 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
     <div style={s.overlay} onClick={e => e.target===e.currentTarget && onClose?.()}>
       <div style={s.modal}>
         <div style={s.header}>
-          <span style={s.title}>{isEdit ? "Editar producto" : "Agregar producto nuevo"}</span>
+          <span style={s.title}>{isEdit ? "Editar producto" : isDuplicate ? "Duplicar producto" : "Agregar producto nuevo"}</span>
           <button style={s.closeBtn} onClick={onClose}>✕</button>
         </div>
 
         <div style={s.body}>
-          {/* CÓDIGO */}
           <div style={s.field}>
             <label style={s.label}>Código de barra <span style={s.hint}>(escanea o escribe)</span></label>
             <input ref={codigoRef} style={{ ...s.input, fontFamily:"monospace", fontSize:16 }}
@@ -139,7 +133,6 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
 
           {inp("Descripción / Nombre", "nombre")}
 
-          {/* TIPO VENTA */}
           <div style={s.field}>
             <label style={s.label}>Tipo de venta</label>
             <div style={s.pills}>
@@ -150,7 +143,6 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
             </div>
           </div>
 
-          {/* PRECIOS */}
           <div style={s.section}>💰 Precios</div>
           <div style={s.row}>
             {inp("Costo sin IVA ($)", "precio_costo_sin_iva", "number")}
@@ -163,7 +155,6 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
             </div>
           </div>
 
-          {/* BIDIRECCIONAL */}
           <div style={s.biBox}>
             <div style={s.field}>
               <label style={s.label}>% Ganancia <span style={s.hint}>(editable)</span></label>
@@ -183,20 +174,19 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
 
           {inp("Precio mayoreo ($)", "precio_mayoreo", "number")}
 
-          {/* CLASIFICACIÓN */}
           <div style={s.section}>🏷️ Clasificación</div>
           <div style={s.row}>
             <div style={s.field}>
               <label style={s.label}>Departamento</label>
               <select style={s.input} value={form.departamento} onChange={e => handleChange("departamento", e.target.value)}>
                 <option value="">Seleccionar...</option>
+                <option value="Abarrotes">Abarrotes</option>
                 {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             {inp("Proveedor", "proveedor")}
           </div>
 
-          {/* INVENTARIO */}
           <div style={s.section}>📦 Inventario</div>
           <div style={s.field}>
             <label style={s.label}>¿Usa inventario?</label>
@@ -220,7 +210,7 @@ export default function AddProduct({ onClose, onSaved, productToEdit }) {
         <div style={s.footer}>
           <button style={s.cancelBtn} onClick={onClose}>Cancelar</button>
           <button style={s.saveBtn} onClick={save} disabled={saving}>
-            {saving ? "Guardando..." : isEdit ? "✓ Guardar cambios" : "✓ Agregar producto"}
+            {saving ? "Guardando..." : isEdit ? "✓ Guardar cambios" : isDuplicate ? "✓ Crear copia" : "✓ Agregar producto"}
           </button>
         </div>
       </div>
