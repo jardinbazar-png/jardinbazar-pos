@@ -1,4 +1,4 @@
-// JARDINBAZAR POS v5 — Turnos, multiticket y duplicar productos
+// JARDINBAZAR POS v6 — Modular
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import AddProduct from "./AddProduct.jsx";
@@ -6,6 +6,7 @@ import Login from "./Login.jsx";
 import Usuarios from "./Usuarios.jsx";
 import CierreCaja from "./CierreCaja.jsx";
 import Turnos from "./Turnos.jsx";
+import Inventario from "./Inventario.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -21,27 +22,26 @@ const Ico = ({ path, size = 20 }) => (
   </svg>
 );
 const I = {
-  search: "M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z",
-  cart: "M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0",
-  trash: "M3 6h18M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2",
-  plus: "M12 5v14M5 12h14",
-  minus: "M5 12h14",
-  cash: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
-  card: "M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 13h.01",
+  search:   "M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z",
+  cart:     "M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0",
+  trash:    "M3 6h18M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2",
+  plus:     "M12 5v14M5 12h14",
+  minus:    "M5 12h14",
+  cash:     "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+  card:     "M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 13h.01",
   transfer: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
-  check: "M20 6L9 17l-5-5",
-  x: "M18 6L6 18M6 6l12 12",
-  box: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
-  chart: "M18 20V10M12 20V4M6 20v-6",
-  warn: "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
-  refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
-  zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
-  filter: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
-  user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
-  users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
-  logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
-  clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
-  copy: "M20 9H11a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+  check:    "M20 6L9 17l-5-5",
+  x:        "M18 6L6 18M6 6l12 12",
+  box:      "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
+  chart:    "M18 20V10M12 20V4M6 20v-6",
+  warn:     "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+  refresh:  "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
+  zap:      "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+  filter:   "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
+  user:     "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  users:    "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+  logout:   "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+  clock:    "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
 };
 
 export default function POSApp() {
@@ -196,10 +196,10 @@ export default function POSApp() {
   const stockBajoCount = products.filter(p => p.existencia <= p.stock_minimo && p.stock_minimo > 0).length;
 
   const navItems = [
-    { key: "pos", icon: I.cart, label: "Punto de Venta" },
-    { key: "inventario", icon: I.box, label: "Inventario" },
-    { key: "caja", icon: I.cash, label: "Caja del Día" },
-    { key: "turnos", icon: I.clock, label: "Turnos" },
+    { key: "pos",        icon: I.cart,  label: "Punto de Venta" },
+    { key: "inventario", icon: I.box,   label: "Inventario" },
+    { key: "caja",       icon: I.cash,  label: "Caja del Día" },
+    { key: "turnos",     icon: I.clock, label: "Turnos" },
     ...(isAdmin ? [
       { key: "reportes", icon: I.chart, label: "Reportes" },
       { key: "usuarios", icon: I.users, label: "Usuarios" },
@@ -222,14 +222,20 @@ export default function POSApp() {
           </button>
         ))}
         <div style={{ flex: 1 }} />
-        {stockBajoCount > 0 && <div style={s.stockAlert}><Ico path={I.warn} size={14} /><span>{stockBajoCount} con stock bajo</span></div>}
+        {stockBajoCount > 0 && (
+          <div style={s.stockAlert}>
+            <Ico path={I.warn} size={14} /><span>{stockBajoCount} con stock bajo</span>
+          </div>
+        )}
         <div style={s.userBar}>
           <div style={s.userAvatar}>{usuario.nombre[0].toUpperCase()}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#f9fafb", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{usuario.nombre}</div>
             <div style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase" }}>{usuario.rol}</div>
           </div>
-          <button style={s.logoutBtn} onClick={() => { setUsuario(null); setTickets([{ id: 1, nombre: "Ticket 1", cart: [] }]); setTicketActivo(0); setView("pos"); }} title="Cerrar sesión">
+          <button style={s.logoutBtn}
+            onClick={() => { setUsuario(null); setTickets([{ id: 1, nombre: "Ticket 1", cart: [] }]); setTicketActivo(0); setView("pos"); }}
+            title="Cerrar sesión">
             <Ico path={I.logout} size={14} />
           </button>
         </div>
@@ -249,6 +255,7 @@ export default function POSApp() {
           </div>
         </header>
 
+        {/* ── POS ── */}
         {view === "pos" && (
           <div style={s.posLayout}>
             <section style={s.prodPanel}>
@@ -318,7 +325,13 @@ export default function POSApp() {
                 {cart.length > 0 && <button style={s.clearCart} onClick={() => setCart([])}>Limpiar</button>}
               </div>
               <div style={s.cartItems}>
-                {cart.length === 0 && <div style={s.emptyCart}><Ico path={I.cart} size={36} /><p>Escanea o selecciona productos</p><p style={{ fontSize: 11, color: "#d1d5db" }}>F3 venta rápida · F5 nuevo ticket</p></div>}
+                {cart.length === 0 && (
+                  <div style={s.emptyCart}>
+                    <Ico path={I.cart} size={36} />
+                    <p>Escanea o selecciona productos</p>
+                    <p style={{ fontSize: 11, color: "#d1d5db" }}>F3 venta rápida · F5 nuevo ticket</p>
+                  </div>
+                )}
                 {cart.map(item => (
                   <div key={item.id} style={s.cartItem}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -351,73 +364,22 @@ export default function POSApp() {
           </div>
         )}
 
+        {/* ── INVENTARIO (componente externo) ── */}
         {view === "inventario" && (
-          <div style={s.tableWrap}>
-            <div style={s.toolbar}>
-              <div style={s.searchBox}>
-                <Ico path={I.search} size={15} />
-                <input style={s.searchInput} placeholder="Buscar producto…" onChange={e => setQuery(e.target.value)} />
-              </div>
-              <button style={s.addBtn} onClick={() => { setEditProduct(null); setIsDuplicateMode(false); setShowAddProduct(true); }}>+ Agregar producto</button>
-              <button style={{ ...s.toolBtn, borderColor: filterStockBajo ? "#d97706" : "#e5e7eb", color: filterStockBajo ? "#d97706" : "#374151" }}
-                onClick={() => setFilterStockBajo(!filterStockBajo)}>
-                <Ico path={I.filter} size={14} />{filterStockBajo ? "Ver todos" : `Stock bajo (${stockBajoCount})`}
-              </button>
-              <button style={s.reloadBtn} onClick={loadProducts}><Ico path={I.refresh} size={14} /> Actualizar</button>
-            </div>
-            <div style={{ overflowY: "auto", flex: 1 }}>
-              <table style={s.table}>
-                <thead>
-                  <tr>{["Código", "Producto", "Departamento", ...(isAdmin ? ["Costo", "Margen"] : []), "Precio", "Stock", "Mín.", ""].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {products.filter(p => {
-                    const mq = !query || p.nombre?.toLowerCase().includes(query.toLowerCase());
-                    const ms = !filterStockBajo || (p.existencia <= p.stock_minimo && p.stock_minimo > 0);
-                    return mq && ms;
-                  }).map(p => {
-                    const margin = p.precio_venta > 0 ? ((p.precio_venta - p.precio_costo) / p.precio_venta * 100).toFixed(1) : 0;
-                    const isLow = p.existencia <= p.stock_minimo && p.stock_minimo > 0;
-                    return (
-                      <tr key={p.id} style={{ background: isLow ? "#fef9c3" : "transparent" }}>
-                        <td style={{ ...s.td, fontFamily: "monospace", fontSize: 11, color: "#9ca3af" }}>{p.codigo}</td>
-                        <td style={{ ...s.td, fontWeight: 600 }}>{p.nombre}</td>
-                        <td style={s.td}><span style={s.dept}>{p.departamento}</span></td>
-                        {isAdmin && <>
-                          <td style={{ ...s.td, color: "#6b7280" }}>{fmt(p.precio_costo)}</td>
-                          <td style={{ ...s.td, fontWeight: 700, color: parseFloat(margin) > 20 ? "#16a34a" : "#d97706" }}>{margin}%</td>
-                        </>}
-                        <td style={{ ...s.td, fontWeight: 700 }}>{fmt(p.precio_venta)}</td>
-                        <td style={s.td}><span style={{ color: p.existencia <= 0 ? "#ef4444" : isLow ? "#f59e0b" : "#16a34a", fontWeight: 600 }}>{isLow && "⚠ "}{p.existencia}</span></td>
-                        <td style={{ ...s.td, color: "#9ca3af" }}>{p.stock_minimo}</td>
-                        <td style={s.td}>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button style={s.editBtn} onClick={() => { setEditProduct(p); setIsDuplicateMode(false); setShowAddProduct(true); }}>Editar</button>
-                            <button style={{ ...s.editBtn, color: "#2563eb" }} onClick={() => { setEditProduct(p); setIsDuplicateMode(true); setShowAddProduct(true); }} title="Duplicar producto">
-                              <Ico path={I.copy} size={11} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Inventario products={products} loadProducts={loadProducts} isAdmin={isAdmin} />
         )}
 
         {view === "caja" && <CierreCaja usuario={usuario} />}
         {view === "turnos" && <Turnos usuario={usuario} />}
         {view === "reportes" && isAdmin && (
           <div style={s.cajaWrap}>
-            <div style={s.cajaNote}><Ico path={I.chart} size={16} /><span>Los reportes con gráficos y desglose de comisiones se activan en la próxima etapa.</span></div>
+            <div style={s.cajaNote}><Ico path={I.chart} size={16} /><span>Reportes con gráficos disponibles en Etapa 8.</span></div>
           </div>
         )}
         {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
-      {/* MODAL COBRO */}
+      {/* ── MODAL COBRO ── */}
       {payModal && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setPayModal(false)}>
           <div style={s.modal}>
@@ -429,11 +391,11 @@ export default function POSApp() {
             <div style={{ textAlign: "center", color: "#6b7280", fontSize: 13, marginBottom: 20 }}>{cart.length} producto{cart.length !== 1 ? "s" : ""}</div>
             <div style={s.methods}>
               {[
-                { key: "efectivo", icon: I.cash, label: "Efectivo" },
-                { key: "debito", icon: I.card, label: "Débito" },
-                { key: "credito", icon: I.card, label: "Crédito" },
+                { key: "efectivo",      icon: I.cash,     label: "Efectivo" },
+                { key: "debito",        icon: I.card,     label: "Débito" },
+                { key: "credito",       icon: I.card,     label: "Crédito" },
                 { key: "transferencia", icon: I.transfer, label: "Transfer." },
-                { key: "fiado", icon: I.user, label: "Fiado" },
+                { key: "fiado",         icon: I.user,     label: "Fiado" },
               ].map(({ key, icon, label }) => (
                 <button key={key} style={{ ...s.methodBtn, ...(payMethod === key ? s.methodActive : {}) }} onClick={() => setPayMethod(key)}>
                   <Ico path={icon} size={18} /><span>{label}</span>
@@ -470,7 +432,7 @@ export default function POSApp() {
         </div>
       )}
 
-      {/* MODAL VENTA RÁPIDA */}
+      {/* ── MODAL VENTA RÁPIDA ── */}
       {showVentaRapida && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setShowVentaRapida(false)}>
           <div style={{ ...s.modal, maxWidth: 340 }}>
@@ -499,11 +461,11 @@ export default function POSApp() {
       )}
 
       {showAddProduct && (
-        <AddProduct 
-          productToEdit={editProduct} 
-          isDuplicate={isDuplicateMode} 
-          onClose={() => { setShowAddProduct(false); setEditProduct(null); setIsDuplicateMode(false); }} 
-          onSaved={loadProducts} 
+        <AddProduct
+          productToEdit={editProduct}
+          isDuplicate={isDuplicateMode}
+          onClose={() => { setShowAddProduct(false); setEditProduct(null); setIsDuplicateMode(false); }}
+          onSaved={loadProducts}
         />
       )}
 
@@ -514,10 +476,9 @@ export default function POSApp() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #f3f4f6; font-family: 'Inter', sans-serif; }
         button { font-family: 'Inter', sans-serif; cursor: pointer; }
-        input { font-family: 'Inter', sans-serif; }
+        input, select, textarea { font-family: 'Inter', sans-serif; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
-        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
       `}</style>
     </div>
   );
@@ -540,7 +501,7 @@ const s = {
   dot: { width: 8, height: 8, borderRadius: "50%" },
   statusTxt: { color: "#9ca3af", fontSize: 11 },
   main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
-  topbar: { height: 64, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px" },
+  topbar: { height: 64, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", flexShrink: 0 },
   topDate: { fontSize: 14, fontWeight: 600, color: "#374151", textTransform: "capitalize" },
   topRight: { display: "flex", alignItems: "center", gap: 24 },
   kpi: { display: "flex", flexDirection: "column", alignItems: "flex-end" },
@@ -560,7 +521,7 @@ const s = {
   searchBox: { display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", height: 42 },
   searchInput: { border: "none", outline: "none", width: "100%", fontSize: 14, color: "#111827" },
   clearBtn: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer" },
-  toolBtn: { display: "flex", alignItems: "center", gap: 8, border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", height: 42, fontSize: 13, fontWeight: 600, background: "#fff" },
+  toolBtn: { display: "flex", alignItems: "center", gap: 8, border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", height: 42, fontSize: 13, fontWeight: 600, background: "#fff", cursor: "pointer" },
   grid: { flex: 1, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12, overflowY: "auto", alignContent: "start" },
   card: { position: "relative", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", alignItems: "flex-start", textAlign: "left", transition: "all .15s" },
   agotado: { position: "absolute", inset: 0, background: "#ffffffaa", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444", fontWeight: 800, fontSize: 14, borderRadius: 12 },
@@ -571,6 +532,7 @@ const s = {
   cardPrice: { fontSize: 14, fontWeight: 800, color: "#16a34a" },
   cardStock: { fontSize: 11, fontWeight: 500 },
   empty: { gridColumn: "1/-1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, color: "#9ca3af", gap: 12 },
+  center: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af" },
   cartPanel: { width: 340, background: "#fff", borderLeft: "1px solid #e5e7eb", display: "flex", flexDirection: "column" },
   cartHeader: { display: "flex", alignItems: "center", gap: 10, padding: "18px 20px", borderBottom: "1px solid #e5e7eb" },
   clearCart: { marginLeft: "auto", background: "none", border: "none", color: "#ef4444", fontSize: 12, fontWeight: 600 },
@@ -587,15 +549,6 @@ const s = {
   totalRow: { display: "flex", justifyContent: "space-between", fontSize: 13 },
   totalBig: { display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, color: "#111827", marginTop: 4, paddingTop: 8, borderTop: "1px solid #e5e7eb" },
   payBtn: { margin: "0 20px 20px", padding: 14, background: "#16a34a", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, boxShadow: "0 4px 12px #16a34a44" },
-  tableWrap: { flex: 1, padding: 24, display: "flex", flexDirection: "column", overflow: "hidden" },
-  toolbar: { display: "flex", gap: 12, marginBottom: 16, alignItems: "center" },
-  addBtn: { background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: "0 16px", height: 40, fontSize: 13, fontWeight: 700 },
-  reloadBtn: { background: "none", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "0 14px", height: 40, fontSize: 13, fontWeight: 600, color: "#4b5563" },
-  table: { width: "100%", borderCollapse: "collapse", textAlign: "left" },
-  th: { padding: "12px 16px", background: "#f9fafb", borderBottom: "1.5px solid #e5e7eb", fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" },
-  td: { padding: "14px 16px", borderBottom: "1px solid #e5e7eb", fontSize: 13, color: "#111827" },
-  dept: { background: "#f3f4f6", padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#4b5563" },
-  editBtn: { background: "none", border: "none", color: "#16a34a", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   overlay: { position: "fixed", inset: 0, background: "#00000077", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 16 },
   modal: { background: "#fff", borderRadius: 16, width: "100%", maxWidth: 400, padding: 24, boxShadow: "0 20px 60px #0004" },
   modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
@@ -610,5 +563,5 @@ const s = {
   confirmBtn: { flex: 1, padding: 12, background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 },
   successFlash: { position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#111827", color: "#fff", padding: "14px 24px", borderRadius: 12, display: "flex", alignItems: "center", gap: 12, fontWeight: 700, fontSize: 14, boxShadow: "0 10px 30px #0003", zIndex: 400 },
   cajaWrap: { padding: 24 },
-  cajaNote: { display: "flex", alignItems: "center", gap: 10, background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: 16, borderRadius: 10, color: "#1e40af", fontSize: 13, fontWeight: 500 }
+  cajaNote: { display: "flex", alignItems: "center", gap: 10, background: "#eff6ff", border: "1.5px solid #bfdbfe", padding: 16, borderRadius: 10, color: "#1e40af", fontSize: 13, fontWeight: 500 },
 };
