@@ -256,7 +256,7 @@ const navItems = [
     { key: "inventario", icon: I.box,      label: "Inventario" },
     { key: "caja",       icon: I.cash,     label: "Caja del Día" },
     { key: "turnos",     icon: I.clock,    label: "Turnos" },
-    { key: "servicios",  icon: I.filter,   label: "Servicios Externos" }, // Nueva línea
+    { key: "servicios",  icon: I.filter,   label: "Servicios Externos" },
     ...(isAdmin ? [
       { key: "usuarios", icon: I.users,    label: "Usuarios" },
     ] : []),
@@ -423,12 +423,12 @@ const navItems = [
           </div>
         )}
 
-        {view === "inventario" && <Inventario products={products} loadProducts={loadProducts} isAdmin={isAdmin} />}
+       {view === "inventario" && <Inventario products={products} loadProducts={loadProducts} isAdmin={isAdmin} />}
         {view === "ventas" && <Ventas />}
         {view === "ofertas" && <Ofertas />}
         {view === "caja" && <CierreCaja usuario={usuario} />}
         {view === "turnos" && <Turnos usuario={usuario} />}
-        {view === "servicios" && <ServiciosExternos usuario={usuario} isAdmin={isAdmin} />} {/* Nueva línea */}
+        {view === "servicios" && <ServiciosExternos usuario={usuario} isAdmin={isAdmin} />}
         {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
