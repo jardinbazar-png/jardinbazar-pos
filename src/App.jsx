@@ -7,6 +7,7 @@ import Usuarios from "./Usuarios.jsx";
 import CierreCaja from "./CierreCaja.jsx";
 import Turnos from "./Turnos.jsx";
 import Inventario from "./Inventario.jsx";
+import Ventas from "./Ventas.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -197,6 +198,11 @@ export default function POSApp() {
 
   const navItems = [
     { key: "pos",        icon: I.cart,  label: "Punto de Venta" },
+    {/* ── INVENTARIO (componente externo) ── */}
+{view === "inventario" && (
+  <Inventario products={products} loadProducts={loadProducts} isAdmin={isAdmin} />
+)}
+    { key: "ventas", icon: I.list, label: "Ventas" },
     { key: "inventario", icon: I.box,   label: "Inventario" },
     { key: "caja",       icon: I.cash,  label: "Caja del Día" },
     { key: "turnos",     icon: I.clock, label: "Turnos" },
