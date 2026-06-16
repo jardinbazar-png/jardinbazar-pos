@@ -9,6 +9,7 @@ import Turnos from "./Turnos.jsx";
 import Inventario from "./Inventario.jsx";
 import Ventas from "./Ventas.jsx";
 import Ofertas from "./Ofertas.jsx";
+import ServiciosExternos from "./ServiciosExternos.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -248,13 +249,14 @@ export default function POSApp() {
   const stockBajoCount = products.filter(p => p.existencia <= p.stock_minimo && p.stock_minimo > 0).length;
 
   // Iconos corregidos y validados para el menú lateral para evitar fallos de React
-  const navItems = [
+const navItems = [
     { key: "pos",        icon: I.cart,     label: "Punto de Venta" },
     { key: "ventas",     icon: I.transfer, label: "Historial Ventas" },
     { key: "ofertas",    icon: I.tag,      label: "Ofertas / Combos" },
     { key: "inventario", icon: I.box,      label: "Inventario" },
     { key: "caja",       icon: I.cash,     label: "Caja del Día" },
     { key: "turnos",     icon: I.clock,    label: "Turnos" },
+    { key: "servicios",  icon: I.filter,   label: "Servicios Externos" }, // Nueva línea
     ...(isAdmin ? [
       { key: "usuarios", icon: I.users,    label: "Usuarios" },
     ] : []),
@@ -426,6 +428,7 @@ export default function POSApp() {
         {view === "ofertas" && <Ofertas />}
         {view === "caja" && <CierreCaja usuario={usuario} />}
         {view === "turnos" && <Turnos usuario={usuario} />}
+        {view === "servicios" && <ServiciosExternos usuario={usuario} isAdmin={isAdmin} />} {/* Nueva línea */}
         {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
