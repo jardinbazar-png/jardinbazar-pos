@@ -1,4 +1,4 @@
-// JARDINBAZAR POS v6 — Modular
+// JARDINBAZAR POS v6 — Modular (Corregido)
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import AddProduct from "./AddProduct.jsx";
@@ -44,7 +44,6 @@ export default function App() {
     if (data) setProducts(data);
   }, []);
 
-  // ARREGLADO: useEffect limpio, cerrado y sin la función fantasma que congelaba el sistema
   useEffect(() => {
     if (!usuario) return;
     loadProducts();
@@ -73,7 +72,8 @@ export default function App() {
     };
   }, [loadProducts, cart, usuario]);
 
-  const login = (user) => {
+  // Aquí nos aseguramos de que maneje bien el estado al loguearse
+  const handleLoginSuccess = (user) => {
     setUsuario(user);
   };
 
@@ -138,7 +138,8 @@ export default function App() {
     console.log("Ticket en espera");
   };
 
-  if (!usuario) return <Login onLogin={login} supabase={supabase} />;
+  // Corregido para que conecte directo con la función que actualiza el estado
+  if (!usuario) return <Login onLogin={handleLoginSuccess} supabase={supabase} />;
 
   return (
     <div style={s.app}>
@@ -330,7 +331,6 @@ export default function App() {
   );
 }
 
-// --- HOJA DE ESTILOS INTACTA ---
 const s = {
   app: { display: "flex", height: "100vh", backgroundColor: "#f3f4f6", fontFamily: "system-ui, sans-serif" },
   sidebar: { width: 260, backgroundColor: "#111827", color: "#fff", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 20 },
