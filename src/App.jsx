@@ -8,6 +8,7 @@ import CierreCaja from "./CierreCaja.jsx";
 import Turnos from "./Turnos.jsx";
 import Inventario from "./Inventario.jsx";
 import Ventas from "./Ventas.jsx";
+import Ofertas from "./Ofertas.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -72,6 +73,14 @@ export default function POSApp() {
   const searchRef = useRef(null);
   const isAdmin = usuario?.rol === "admin";
 
+  const [descuentoTipo, setDescuentoTipo] = useState("ninguno"); 
+  const [descuentoValor, setDescuentoValor] = useState("");
+  const [esTercero, setEsTercero] = useState(false);
+  const [nombreTercero, setNombreTercero] = useState("");
+  const [sinIva, setSinIva] = useState(false);
+  const [ofertas, setOfertas] = useState([]);
+  const [ofertaSeleccionada, setOfertaSeleccionada] = useState(null);
+
   const cart = tickets[ticketActivo]?.cart || [];
   const setCart = (fn) => {
     setTickets(prev => prev.map((t, i) => i === ticketActivo ? { ...t, cart: typeof fn === "function" ? fn(t.cart) : fn } : t));
@@ -96,9 +105,20 @@ export default function POSApp() {
     setLoading(false);
   }, []);
 
+  const loadOfertas = useCallback(async () => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from("ofertas")
+      .select("*")
+      .eq("activa", true)
+      .or(`fecha_fin.is.null,fecha_fin.gte.${hoy}`);
+    setOfertas(data || []);
+  }, []);
+  
   useEffect(() => {
     if (!usuario) return;
     loadProducts();
+    loadOfertas();
     const t = setInterval(() => setTime(fmtTime()), 1000);
     const onOnline = () => setOnline(true);
     const onOffline = () => setOnline(false);
@@ -118,7 +138,7 @@ export default function POSApp() {
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("keydown", keys);
     };
-  }, [loadProducts, cart, usuario]);
+  }, [loadProducts, loadOfertas, cart, usuario]);
 
   useEffect(() => {
     if (!usuario) return;
@@ -157,7 +177,27 @@ export default function POSApp() {
     setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i).filter(i => i.qty > 0));
   };
 
-  const total = cart.reduce((s, i) => s + i.precio_venta * i.qty, 0);
+  const totalBruto = cart.reduce((s, i) => s + i.precio_venta * i.qty, 0);
+  
+  const calcularDescuento = () => {
+    if (ofertaSeleccionada) {
+      if (ofertaSeleccionada.tipo === "porcentaje") return Math.round(totalBruto * ofertaSeleccionada.valor / 100);
+      if (ofertaSeleccionada.tipo === "monto_fijo") return ofertaSeleccionada.valor;
+      if (ofertaSeleccionada.tipo === "2x1") {
+        if (cart.length >= 2) {
+          const sorted = [...cart].sort((a, b) => a.precio_venta - b.precio_venta);
+          return sorted[0].precio_venta;
+        }
+      }
+      if (ofertaSeleccionada.tipo === "combo") return Math.max(0, totalBruto - ofertaSeleccionada.valor);
+    }
+    if (descuentoTipo === "porcentaje" && descuentoValor) return Math.round(totalBruto * parseFloat(descuentoValor) / 100);
+    if (descuentoTipo === "monto_fijo" && descuentoValor) return parseFloat(descuentoValor);
+    return 0;
+  };
+
+  const descuentoAplicado = calcularDescuento();
+  const total = Math.max(0, totalBruto - descuentoAplicado);
   const change = parseFloat(cashInput || 0) - total;
 
   const completeSale = async (montoExtra = 0, descExtra = "") => {
@@ -165,7 +205,15 @@ export default function POSApp() {
     if (totalFinal <= 0) return;
     const { data: venta, error: ventaError } = await supabase
       .from("ventas")
-      .insert({ total: totalFinal, metodo_pago: payMethod + (fiadoNombre ? `_fiado:${fiadoNombre}` : "") })
+      .insert({
+        total: totalFinal,
+        metodo_pago: payMethod + (fiadoNombre ? `_fiado:${fiadoNombre}` : ""),
+        descuento_monto: montoExtra > 0 ? 0 : descuentoAplicado,
+        descuento_tipo: ofertaSeleccionada ? ofertaSeleccionada.tipo : descuentoTipo,
+        es_tercero: esTercero,
+        nombre_tercero: esTercero ? nombreTercero : null,
+        sin_iva: sinIva,
+      })
       .select().single();
     if (ventaError) { alert("Error al registrar venta"); return; }
     if (montoExtra > 0) {
@@ -191,24 +239,27 @@ export default function POSApp() {
     setCashInput(""); setFiadoNombre(""); setVentaRapidaMonto(""); setVentaRapidaDesc("");
     setSuccessMsg(`¡Venta registrada! ${fmt(totalFinal)}`);
     setTimeout(() => setSuccessMsg(""), 2500);
+    setDescuentoTipo("ninguno");
+    setDescuentoValor("");
+    setEsTercero(false);
+    setNombreTercero("");
+    setSinIva(false);
+    setOfertaSeleccionada(null);
     loadProducts();
   };
 
   const stockBajoCount = products.filter(p => p.existencia <= p.stock_minimo && p.stock_minimo > 0).length;
 
   const navItems = [
-    { key: "pos",        icon: I.cart,  label: "Punto de Venta" },
-    {/* ── INVENTARIO (componente externo) ── */}
-{view === "inventario" && (
-  <Inventario products={products} loadProducts={loadProducts} isAdmin={isAdmin} />
-)}
-    { key: "ventas", icon: I.list, label: "Ventas" },
-    { key: "inventario", icon: I.box,   label: "Inventario" },
-    { key: "caja",       icon: I.cash,  label: "Caja del Día" },
-    { key: "turnos",     icon: I.clock, label: "Turnos" },
+    { key: "pos",        icon: I.cart,     label: "Punto de Venta" },
+    { key: "ventas",     icon: I.list,     label: "Ventas" },
+    { key: "ofertas",    icon: I.tag,      label: "Ofertas" },
+    { key: "inventario", icon: I.box,      label: "Inventario" },
+    { key: "caja",       icon: I.cash,     label: "Caja del Día" },
+    { key: "turnos",     icon: I.clock,    label: "Turnos" },
     ...(isAdmin ? [
-      { key: "reportes", icon: I.chart, label: "Reportes" },
-      { key: "usuarios", icon: I.users, label: "Usuarios" },
+      { key: "reportes", icon: I.chart,    label: "Reportes" },
+      { key: "usuarios", icon: I.users,    label: "Usuarios" },
     ] : []),
   ];
 
@@ -253,7 +304,7 @@ export default function POSApp() {
 
       <main style={s.main}>
         <header style={s.topbar}>
-          <div style={s.topDate}>{fmtDate()}</div>
+          <div style={s.topDate()}–{fmtDate()}</div>
           <div style={s.topRight}>
             <div style={s.kpi}><span style={s.kpiLabel}>Ventas hoy</span><span style={s.kpiVal}>{saleCount}</span></div>
             <div style={s.kpi}><span style={s.kpiLabel}>Total hoy</span><span style={s.kpiVal}>{fmt(totalVentas)}</span></div>
@@ -354,7 +405,7 @@ export default function POSApp() {
                 ))}
               </div>
               <div style={s.totals}>
-                <div style={s.totalRow}><span style={{ color: "#6b7280" }}>Subtotal</span><span>{fmt(total)}</span></div>
+                <div style={s.totalRow}><span style={{ color: "#6b7280" }}>Subtotal</span><span>{fmt(totalBruto)}</span></div>
                 {isAdmin && cart.length > 0 && (
                   <div style={s.totalRow}>
                     <span style={{ color: "#9ca3af", fontSize: 11 }}>Utilidad aprox.</span>
@@ -385,16 +436,92 @@ export default function POSApp() {
         {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
-      {/* ── MODAL COBRO ── */}
+      {/* ── MODAL COBRO NUEVO (CON DESCUENTOS Y OFERTAS) ── */}
       {payModal && (
         <div style={s.overlay} onClick={e => e.target === e.currentTarget && setPayModal(false)}>
-          <div style={s.modal}>
+          <div style={{ ...s.modal, maxWidth: 460 }}>
             <div style={s.modalHeader}>
               <span style={{ fontWeight: 700, fontSize: 16 }}>Cobrar — {tickets[ticketActivo]?.nombre}</span>
               <button style={s.iconBtn} onClick={() => setPayModal(false)}><Ico path={I.x} size={18} /></button>
             </div>
-            <div style={s.modalTotal}>{fmt(total)}</div>
-            <div style={{ textAlign: "center", color: "#6b7280", fontSize: 13, marginBottom: 20 }}>{cart.length} producto{cart.length !== 1 ? "s" : ""}</div>
+
+            {/* Resumen de Totales */}
+            <div style={{ background: "#f9fafb", borderRadius: 12, padding: 16, marginBottom: 16, border: "1.5px solid #e5e7eb" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 14 }}>
+                <span style={{ color: "#6b7280" }}>Total Bruto:</span>
+                <span style={{ fontWeight: 600 }}>{fmt(totalBruto)}</span>
+              </div>
+              {descuentoAplicado > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 14, color: "#dc2626" }}>
+                  <span>Descuento aplicado:</span>
+                  <span style={{ fontWeight: 600 }}>- {fmt(descuentoAplicado)}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, paddingTop: 8, borderTop: "1px dashed #e5e7eb" }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>TOTAL A PAGAR:</span>
+                <span style={{ fontSize: 32, fontWeight: 800, color: "#16a34a" }}>{fmt(total)}</span>
+              </div>
+            </div>
+
+            {/* Sección de Ofertas Flexibles Disponibles */}
+            {ofertas.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12, color: "#374151", fontWeight: 600, display: "block", marginBottom: 6 }}>Aplicar Oferta Activa</label>
+                <select 
+                  style={{ ...s.cashField, fontSize: 14, textAlign: "left" }} 
+                  value={ofertaSeleccionada?.id || ""} 
+                  onChange={e => {
+                    const found = ofertas.find(o => o.id === parseInt(e.target.value));
+                    setOfertaSeleccionada(found || null);
+                    if (found) { setDescuentoTipo("ninguno"); setDescuentoValor(""); }
+                  }}
+                >
+                  <option value="">-- Ninguna oferta seleccionada --</option>
+                  {ofertas.map(o => (
+                    <option key={o.id} value={o.id}>{o.nombre} ({o.tipo === 'porcentaje' ? `${o.valor}%` : o.tipo === 'monto_fijo' ? fmt(o.valor) : o.tipo})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Descuentos Manuales (Solo si no hay oferta seleccionada) */}
+            {!ofertaSeleccionada && (
+              <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>Tipo Desc.</label>
+                  <select style={{ ...s.cashField, fontSize: 14, padding: "9px 10px" }} value={descuentoTipo} onChange={e => { setDescuentoTipo(e.target.value); setDescuentoValor(""); }}>
+                    <option value="ninguno">Ninguno</option>
+                    <option value="porcentaje">Porcentaje (%)</option>
+                    <option value="monto_fijo">Monto Fijo ($)</option>
+                  </select>
+                </div>
+                {descuentoTipo !== "ninguno" && (
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>Valor Descuento</label>
+                    <input style={{ ...s.cashField, fontSize: 14, padding: "9px 10px" }} type="number" placeholder="0" value={descuentoValor} onChange={e => setDescuentoValor(e.target.value)} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Opciones Adicionales (Sin IVA / Terceros) */}
+            <div style={{ background: "#f3f4f6", borderRadius: 10, padding: 12, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", cursor: "pointer" }}>
+                <input type="checkbox" checked={sinIva} onChange={e => setSinIva(e.target.checked)} />
+                <span>Venta sin IVA (Exenta / Boleta manual)</span>
+              </label>
+              
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", cursor: "pointer" }}>
+                <input type="checkbox" checked={esTercero} onChange={e => { setEsTercero(e.target.checked); if(!e.target.checked) setNombreTercero(""); }} />
+                <span>Esta venta pertenece a un tercero (Proveedor externo)</span>
+              </label>
+
+              {esTercero && (
+                <input style={{ ...s.cashField, fontSize: 13, padding: "6px 12px", textAlign: "left" }} type="text" placeholder="Nombre del proveedor o tercero" value={nombreTercero} onChange={e => setNombreTercero(e.target.value)} />
+              )}
+            </div>
+
+            {/* Métodos de Pago */}
             <div style={s.methods}>
               {[
                 { key: "efectivo",      icon: I.cash,     label: "Efectivo" },
@@ -408,16 +535,13 @@ export default function POSApp() {
                 </button>
               ))}
             </div>
+
+            {/* Campos Dinámicos por Método */}
             {payMethod === "efectivo" && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 6 }}>Efectivo recibido</label>
                 <input style={s.cashField} type="number" placeholder="0" value={cashInput} onChange={e => setCashInput(e.target.value)} autoFocus />
                 {cashInput && <div style={s.changeRow}><span style={{ color: "#6b7280" }}>Vuelto:</span><span style={{ color: change >= 0 ? "#16a34a" : "#ef4444", fontWeight: 800, fontSize: 22 }}>{fmt(Math.max(0, change))}</span></div>}
-              </div>
-            )}
-            {(payMethod === "debito" || payMethod === "credito") && (
-              <div style={{ marginBottom: 16, background: "#eff6ff", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#2563eb" }}>
-                ℹ️ La comisión por {payMethod} se descontará en los reportes de ganancia.
               </div>
             )}
             {payMethod === "fiado" && (
@@ -426,12 +550,16 @@ export default function POSApp() {
                 <input style={s.cashField} type="text" placeholder="Nombre de quien fía" value={fiadoNombre} onChange={e => setFiadoNombre(e.target.value)} autoFocus />
               </div>
             )}
-            <div style={{ display: "flex", gap: 10 }}>
+
+            {/* Botones de Acción */}
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <button style={s.cancelBtn} onClick={() => setPayModal(false)}>Cancelar</button>
-              <button style={{ ...s.confirmBtn, opacity: (payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre) ? 0.4 : 1 }}
-                disabled={(payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre)}
-                onClick={() => completeSale()}>
-                <Ico path={I.check} size={18} /> Confirmar
+              <button 
+                style={{ ...s.confirmBtn, opacity: (payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre) || (esTercero && !nombreTercero) ? 0.4 : 1 }}
+                disabled={(payMethod === "efectivo" && parseFloat(cashInput || 0) < total) || (payMethod === "fiado" && !fiadoNombre) || (esTercero && !nombreTercero)}
+                onClick={() => completeSale()}
+              >
+                <Ico path={I.check} size={18} /> Confirmar Cobro
               </button>
             </div>
           </div>
