@@ -138,7 +138,7 @@ export default function POSApp() {
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("keydown", keys);
     };
-  }, [loadProducts, loadOfertas, cart, usuario]);
+  }, [usuario]);
 
   useEffect(() => {
     if (!usuario) return;
