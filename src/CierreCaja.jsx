@@ -9,77 +9,97 @@ const supabase = createClient(
 const fmt = n => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(n || 0);
 
 const BILLETES = [20000, 10000, 5000, 2000, 1000, 500];
-const MONEDAS = [500, 100, 50, 10];
-const TABS = ["resumen", "conteo", "gastos", "fiados", "cierre"];
+const MONEDAS  = [500, 100, 50, 10];
+const TABS     = ["resumen", "conteo", "gastos", "fiados", "terceros", "cierre"];
 
 export default function CierreCaja({ usuario }) {
   const hoy = new Date().toISOString().split("T")[0];
   const [tab, setTab] = useState("resumen");
   const [ventas, setVentas] = useState([]);
+  const [comisiones, setComisiones] = useState([]);
   const [conteo, setConteo] = useState({});
   const [conteoMonedas, setConteoMonedas] = useState({});
   const [efectivoInicial, setEfectivoInicial] = useState("");
   const [cajachica, setCajachica] = useState("");
   const [guardado, setGuardado] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // Retiros
   const [retiros, setRetiros] = useState([]);
   const [retiroMonto, setRetiroMonto] = useState("");
   const [retiroDesc, setRetiroDesc] = useState("");
-
-  // Gastos
   const [gastos, setGastos] = useState([]);
   const [gastoMonto, setGastoMonto] = useState("");
   const [gastoDesc, setGastoDesc] = useState("");
-
-  // Billetes falsos
   const [billetesFalsos, setBilletesFalsos] = useState([]);
   const [falsoDenominacion, setFalsoDenominacion] = useState(BILLETES[0]);
   const [falsoCantidad, setFalsoCantidad] = useState(1);
-
-  // Descuadre
   const [motivoDescuadre, setMotivoDescuadre] = useState("");
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase
+      const { data: v } = await supabase
         .from("ventas")
         .select("*")
         .gte("created_at", hoy + "T00:00:00")
-        .lte("created_at", hoy + "T23:59:59");
-      setVentas(data || []);
+        .lte("created_at", hoy + "T23:59:59")
+        .eq("anulada", false);
+      setVentas(v || []);
+
+      const { data: c } = await supabase.from("comisiones_pago").select("*");
+      setComisiones(c || []);
     };
     load();
   }, [hoy]);
 
-  // Totales por método de pago
-  const totalEfectivo = ventas.filter(v => v.metodo_pago === "efectivo").reduce((s, v) => s + v.total, 0);
-  const totalDebito = ventas.filter(v => v.metodo_pago === "debito").reduce((s, v) => s + v.total, 0);
-  const totalCredito = ventas.filter(v => v.metodo_pago === "credito").reduce((s, v) => s + v.total, 0);
+  // Totales por método
+  const totalEfectivo      = ventas.filter(v => v.metodo_pago === "efectivo").reduce((s, v) => s + v.total, 0);
+  const totalDebito        = ventas.filter(v => v.metodo_pago === "debito").reduce((s, v) => s + v.total, 0);
+  const totalCredito       = ventas.filter(v => v.metodo_pago === "credito").reduce((s, v) => s + v.total, 0);
   const totalTransferencia = ventas.filter(v => v.metodo_pago === "transferencia").reduce((s, v) => s + v.total, 0);
-  const totalFiado = ventas.filter(v => v.metodo_pago?.includes("fiado")).reduce((s, v) => s + v.total, 0);
-  const totalDia = ventas.reduce((s, v) => s + v.total, 0);
+  const totalFiado         = ventas.filter(v => v.metodo_pago?.includes("fiado")).reduce((s, v) => s + v.total, 0);
+  const totalTerceros      = ventas.filter(v => v.es_tercero).reduce((s, v) => s + v.total, 0);
+  const totalSinIva        = ventas.filter(v => v.sin_iva).reduce((s, v) => s + v.total, 0);
+  const totalDescuentos    = ventas.reduce((s, v) => s + (v.descuento_monto || 0), 0);
+  const totalDia           = ventas.reduce((s, v) => s + v.total, 0);
 
+  // Comisiones calculadas
+  const getComision = (metodo) => {
+    const c = comisiones.find(x => x.metodo === metodo);
+    if (!c) return 0;
+    const base = metodo === "debito" ? totalDebito : metodo === "credito" ? totalCredito : totalTransferencia;
+    return Math.round(base * c.porcentaje / 100) + (c.monto_fijo || 0);
+  };
+  const comisionDebito        = getComision("debito");
+  const comisionCredito       = getComision("credito");
+  const comisionTransferencia = getComision("transferencia");
+  const totalComisiones       = comisionDebito + comisionCredito + comisionTransferencia;
+
+  const gananciaReal = totalDia - totalTerceros - totalComisiones;
+
+  // Fiados
   const fiados = ventas.filter(v => v.metodo_pago?.includes("fiado")).map(v => ({
-    nombre: v.metodo_pago.replace("efectivo_fiado:", "").replace("fiado:", "").replace(/^.*_fiado:/, ""),
+    nombre: v.metodo_pago.replace(/^.*_fiado:/, "").replace("fiado:", ""),
+    total: v.total,
+    hora: new Date(v.created_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
+  }));
+
+  // Terceros
+  const terceros = ventas.filter(v => v.es_tercero).map(v => ({
+    nombre: v.nombre_tercero || "Sin nombre",
     total: v.total,
     hora: new Date(v.created_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }),
   }));
 
   // Conteo físico
   const totalBilletes = BILLETES.reduce((s, b) => s + (parseInt(conteo[b] || 0) * b), 0);
-  const totalMonedas = MONEDAS.reduce((s, m) => s + (parseInt(conteoMonedas[m] || 0) * m), 0);
-  const totalContado = totalBilletes + totalMonedas;
+  const totalMonedas_ = MONEDAS.reduce((s, m) => s + (parseInt(conteoMonedas[m] || 0) * m), 0);
+  const totalContado  = totalBilletes + totalMonedas_;
 
-  // Descuentos
   const totalRetiros = retiros.reduce((s, r) => s + r.monto, 0);
-  const totalGastos = gastos.reduce((s, g) => s + g.monto, 0);
-  const totalFalsos = billetesFalsos.reduce((s, f) => s + f.denominacion * f.cantidad, 0);
+  const totalGastos  = gastos.reduce((s, g) => s + g.monto, 0);
+  const totalFalsos  = billetesFalsos.reduce((s, f) => s + f.denominacion * f.cantidad, 0);
   const cajachicaVal = parseFloat(cajachica || 0);
 
-  // Cuadratura
-  const esperado = parseFloat(efectivoInicial || 0) + cajachicaVal + totalEfectivo - totalRetiros - totalGastos - totalFalsos;
+  const esperado  = parseFloat(efectivoInicial || 0) + cajachicaVal + totalEfectivo - totalRetiros - totalGastos - totalFalsos;
   const diferencia = totalContado - esperado;
 
   const agregarRetiro = () => {
@@ -126,13 +146,19 @@ export default function CierreCaja({ usuario }) {
     setGuardado(true);
   };
 
-  const tabLabel = { resumen: "📊 Resumen", conteo: "💵 Conteo", gastos: "📋 Gastos", fiados: "🤝 Fiados", cierre: "⚖️ Cierre" };
+  const tabLabel = {
+    resumen:  "📊 Resumen",
+    conteo:   "💵 Conteo",
+    gastos:   "📋 Gastos",
+    fiados:   "🤝 Fiados",
+    terceros: "🏪 Terceros",
+    cierre:   "⚖️ Cierre",
+  };
 
   return (
     <div style={s.wrap}>
       <div style={s.title}>💰 Caja del Día — {new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}</div>
 
-      {/* TABS */}
       <div style={s.tabs}>
         {TABS.map(t => (
           <button key={t} style={{ ...s.tab, ...(tab === t ? s.tabActive : {}) }} onClick={() => setTab(t)}>
@@ -141,28 +167,46 @@ export default function CierreCaja({ usuario }) {
         ))}
       </div>
 
-      {/* ── TAB: RESUMEN ── */}
+      {/* ── RESUMEN ── */}
       {tab === "resumen" && (
         <>
           <div style={s.section}>Ventas por método de pago</div>
           <div style={s.grid4}>
             {[
-              { label: "Efectivo", value: totalEfectivo, color: "#16a34a" },
-              { label: "Débito", value: totalDebito, color: "#2563eb" },
-              { label: "Crédito", value: totalCredito, color: "#9333ea" },
-              { label: "Transferencia", value: totalTransferencia, color: "#0891b2" },
-              { label: "Fiado", value: totalFiado, color: "#d97706" },
-              { label: "TOTAL DÍA", value: totalDia, color: "#111827" },
+              { label: "Efectivo",       value: totalEfectivo,      color: "#16a34a" },
+              { label: "Débito",         value: totalDebito,        color: "#2563eb" },
+              { label: "Crédito",        value: totalCredito,       color: "#9333ea" },
+              { label: "Transferencia",  value: totalTransferencia, color: "#0891b2" },
+              { label: "Fiado",          value: totalFiado,         color: "#d97706" },
+              { label: "TOTAL DÍA",      value: totalDia,           color: "#111827" },
             ].map(({ label, value, color }) => (
               <div key={label} style={{ ...s.kpi, borderColor: color + "33" }}>
                 <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>{label}</div>
                 <div style={{ fontSize: 18, fontWeight: 800, color }}>{fmt(value)}</div>
-                <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{ventas.filter(v => label === "Fiado" ? v.metodo_pago?.includes("fiado") : label === "TOTAL DÍA" ? true : v.metodo_pago === label.toLowerCase()).length} ventas</div>
               </div>
             ))}
           </div>
 
-          <div style={s.section}>Resumen de descuentos del día</div>
+          <div style={s.section}>Descuentos y ajustes del día</div>
+          <div style={s.cuadGrid}>
+            <div style={s.cuadRow}><span>Descuentos aplicados en ventas</span><span style={{ color: "#ef4444" }}>- {fmt(totalDescuentos)}</span></div>
+            <div style={s.cuadRow}><span>Ventas de terceros (no es ganancia tuya)</span><span style={{ color: "#d97706" }}>{fmt(totalTerceros)}</span></div>
+            <div style={s.cuadRow}><span>Ventas sin IVA (cigarros, etc.)</span><span style={{ color: "#6b7280" }}>{fmt(totalSinIva)}</span></div>
+          </div>
+
+          <div style={s.section}>Comisiones por método de pago</div>
+          <div style={s.cuadGrid}>
+            {comisionDebito > 0 && <div style={s.cuadRow}><span>Comisión débito ({comisiones.find(c=>c.metodo==="debito")?.porcentaje}%)</span><span style={{ color: "#ef4444" }}>- {fmt(comisionDebito)}</span></div>}
+            {comisionCredito > 0 && <div style={s.cuadRow}><span>Comisión crédito ({comisiones.find(c=>c.metodo==="credito")?.porcentaje}%)</span><span style={{ color: "#ef4444" }}>- {fmt(comisionCredito)}</span></div>}
+            {comisionTransferencia > 0 && <div style={s.cuadRow}><span>Comisión transferencia</span><span style={{ color: "#ef4444" }}>- {fmt(comisionTransferencia)}</span></div>}
+            {totalComisiones === 0 && <div style={{ color: "#9ca3af", fontSize: 13, fontStyle: "italic" }}>Sin comisiones hoy</div>}
+            <div style={{ ...s.cuadRow, borderTop: "2px solid #e5e7eb", paddingTop: 10, fontWeight: 800 }}>
+              <span>Ganancia real del día</span>
+              <span style={{ color: "#16a34a", fontSize: 18 }}>{fmt(gananciaReal)}</span>
+            </div>
+          </div>
+
+          <div style={s.section}>Otros descuentos de efectivo</div>
           <div style={s.cuadGrid}>
             <div style={s.cuadRow}><span>Retiros de efectivo</span><span style={{ color: "#ef4444" }}>- {fmt(totalRetiros)}</span></div>
             <div style={s.cuadRow}><span>Gastos del día</span><span style={{ color: "#ef4444" }}>- {fmt(totalGastos)}</span></div>
@@ -175,7 +219,7 @@ export default function CierreCaja({ usuario }) {
         </>
       )}
 
-      {/* ── TAB: CONTEO ── */}
+      {/* ── CONTEO ── */}
       {tab === "conteo" && (
         <>
           <div style={s.section}>Efectivo inicial y caja chica</div>
@@ -189,7 +233,6 @@ export default function CierreCaja({ usuario }) {
               <input style={s.input} type="number" placeholder="Monedas de inicio" value={cajachica} onChange={e => setCajachica(e.target.value)} />
             </div>
           </div>
-
           <div style={s.section}>Billetes</div>
           <div style={s.conteoGrid}>
             {BILLETES.map(b => (
@@ -202,7 +245,6 @@ export default function CierreCaja({ usuario }) {
               </div>
             ))}
           </div>
-
           <div style={s.section}>Monedas</div>
           <div style={s.conteoGrid}>
             {MONEDAS.map(m => (
@@ -215,10 +257,9 @@ export default function CierreCaja({ usuario }) {
               </div>
             ))}
           </div>
-
           <div style={{ ...s.cuadGrid, marginTop: 16 }}>
             <div style={s.cuadRow}><span>Total billetes</span><span style={{ fontWeight: 700 }}>{fmt(totalBilletes)}</span></div>
-            <div style={s.cuadRow}><span>Total monedas</span><span style={{ fontWeight: 700 }}>{fmt(totalMonedas)}</span></div>
+            <div style={s.cuadRow}><span>Total monedas</span><span style={{ fontWeight: 700 }}>{fmt(totalMonedas_)}</span></div>
             <div style={{ ...s.cuadRow, borderTop: "2px solid #e5e7eb", paddingTop: 10, fontWeight: 800, fontSize: 16 }}>
               <span>Total contado</span><span style={{ color: "#16a34a" }}>{fmt(totalContado)}</span>
             </div>
@@ -226,14 +267,13 @@ export default function CierreCaja({ usuario }) {
         </>
       )}
 
-      {/* ── TAB: GASTOS ── */}
+      {/* ── GASTOS ── */}
       {tab === "gastos" && (
         <>
-          {/* Retiros */}
           <div style={s.section}>Retiros de efectivo</div>
           <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
             <input style={{ ...s.input, flex: 1 }} type="number" placeholder="Monto ($)" value={retiroMonto} onChange={e => setRetiroMonto(e.target.value)} />
-            <input style={{ ...s.input, flex: 2 }} type="text" placeholder="Descripción (ej: retiro para depósito)" value={retiroDesc} onChange={e => setRetiroDesc(e.target.value)} />
+            <input style={{ ...s.input, flex: 2 }} type="text" placeholder="Descripción" value={retiroDesc} onChange={e => setRetiroDesc(e.target.value)} />
             <button style={s.addBtn} onClick={agregarRetiro}>+ Agregar</button>
           </div>
           {retiros.length === 0 && <div style={s.empty}>Sin retiros registrados</div>}
@@ -246,8 +286,7 @@ export default function CierreCaja({ usuario }) {
           ))}
           {retiros.length > 0 && <div style={{ ...s.cuadRow, fontWeight: 800, marginTop: 8 }}><span>Total retiros</span><span style={{ color: "#ef4444" }}>- {fmt(totalRetiros)}</span></div>}
 
-          {/* Gastos */}
-          <div style={s.section}>Gastos del día (facturas, proveedores, etc.)</div>
+          <div style={s.section}>Gastos del día</div>
           <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
             <input style={{ ...s.input, flex: 1 }} type="number" placeholder="Monto ($)" value={gastoMonto} onChange={e => setGastoMonto(e.target.value)} />
             <input style={{ ...s.input, flex: 2 }} type="text" placeholder="Descripción (ej: factura Carozzi)" value={gastoDesc} onChange={e => setGastoDesc(e.target.value)} />
@@ -263,7 +302,6 @@ export default function CierreCaja({ usuario }) {
           ))}
           {gastos.length > 0 && <div style={{ ...s.cuadRow, fontWeight: 800, marginTop: 8 }}><span>Total gastos</span><span style={{ color: "#ef4444" }}>- {fmt(totalGastos)}</span></div>}
 
-          {/* Billetes falsos */}
           <div style={s.section}>Billetes falsos recibidos</div>
           <div style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "center" }}>
             <select style={{ ...s.input, flex: 1 }} value={falsoDenominacion} onChange={e => setFalsoDenominacion(e.target.value)}>
@@ -285,7 +323,7 @@ export default function CierreCaja({ usuario }) {
         </>
       )}
 
-      {/* ── TAB: FIADOS ── */}
+      {/* ── FIADOS ── */}
       {tab === "fiados" && (
         <>
           <div style={s.section}>Créditos y fiados del día</div>
@@ -308,7 +346,33 @@ export default function CierreCaja({ usuario }) {
         </>
       )}
 
-      {/* ── TAB: CIERRE ── */}
+      {/* ── TERCEROS ── */}
+      {tab === "terceros" && (
+        <>
+          <div style={s.section}>Ventas de terceros del día</div>
+          <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#92400e", marginBottom: 12 }}>
+            ℹ️ Estas ventas no son ganancia del local. Se registran por separado para cuadrar caja.
+          </div>
+          {terceros.length === 0 && <div style={s.empty}>Sin ventas de terceros hoy</div>}
+          {terceros.map((t, i) => (
+            <div key={i} style={s.listRow}>
+              <span style={{ fontWeight: 600 }}>{t.nombre}</span>
+              <span style={{ color: "#6b7280", fontSize: 12 }}>{t.hora}</span>
+              <span style={{ color: "#ea580c", fontWeight: 700, marginLeft: "auto" }}>{fmt(t.total)}</span>
+            </div>
+          ))}
+          {terceros.length > 0 && (
+            <div style={{ ...s.cuadGrid, marginTop: 12 }}>
+              <div style={{ ...s.cuadRow, fontWeight: 800, fontSize: 15 }}>
+                <span>Total ventas de terceros</span>
+                <span style={{ color: "#ea580c" }}>{fmt(totalTerceros)}</span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── CIERRE ── */}
       {tab === "cierre" && (
         <>
           <div style={s.section}>Cuadratura final</div>
@@ -331,7 +395,7 @@ export default function CierreCaja({ usuario }) {
             </div>
             {diferencia !== 0 && (
               <div style={{ fontSize: 12, color: diferencia > 0 ? "#2563eb" : "#ef4444", textAlign: "right" }}>
-                {diferencia > 0 ? "Sobrante — hay más dinero del esperado" : "Faltante — hay menos dinero del esperado"}
+                {diferencia > 0 ? "Sobrante" : "Faltante"}
               </div>
             )}
           </div>
@@ -340,18 +404,25 @@ export default function CierreCaja({ usuario }) {
             <>
               <div style={s.section}>Motivo del descuadre</div>
               <textarea style={{ ...s.input, minHeight: 80, resize: "vertical" }}
-                placeholder="Explica la razón del descuadre (ej: vuelto equivocado, billete no registrado, etc.)"
+                placeholder="Explica la razón..."
                 value={motivoDescuadre} onChange={e => setMotivoDescuadre(e.target.value)} />
             </>
           )}
 
           <div style={s.section}>Resumen completo</div>
           <div style={s.cuadGrid}>
-            <div style={s.cuadRow}><span>Ventas totales del día</span><span style={{ fontWeight: 700 }}>{fmt(totalDia)}</span></div>
+            <div style={s.cuadRow}><span>Ventas totales</span><span style={{ fontWeight: 700 }}>{fmt(totalDia)}</span></div>
             <div style={s.cuadRow}><span style={{ color: "#6b7280" }}>Débito</span><span>{fmt(totalDebito)}</span></div>
             <div style={s.cuadRow}><span style={{ color: "#6b7280" }}>Crédito</span><span>{fmt(totalCredito)}</span></div>
             <div style={s.cuadRow}><span style={{ color: "#6b7280" }}>Transferencia</span><span>{fmt(totalTransferencia)}</span></div>
             <div style={s.cuadRow}><span style={{ color: "#d97706" }}>Fiado (por cobrar)</span><span style={{ color: "#d97706" }}>{fmt(totalFiado)}</span></div>
+            <div style={s.cuadRow}><span style={{ color: "#ea580c" }}>Terceros (no es ganancia)</span><span style={{ color: "#ea580c" }}>- {fmt(totalTerceros)}</span></div>
+            <div style={s.cuadRow}><span style={{ color: "#ef4444" }}>Comisiones tarjetas</span><span style={{ color: "#ef4444" }}>- {fmt(totalComisiones)}</span></div>
+            <div style={s.cuadRow}><span style={{ color: "#ef4444" }}>Descuentos aplicados</span><span style={{ color: "#ef4444" }}>- {fmt(totalDescuentos)}</span></div>
+            <div style={{ ...s.cuadRow, borderTop: "2px solid #e5e7eb", paddingTop: 10, fontWeight: 800, fontSize: 15 }}>
+              <span>Ganancia real del día</span>
+              <span style={{ color: "#16a34a" }}>{fmt(gananciaReal)}</span>
+            </div>
           </div>
 
           {!guardado ? (
@@ -368,28 +439,28 @@ export default function CierreCaja({ usuario }) {
 }
 
 const s = {
-  wrap: { flex: 1, overflowY: "auto", padding: 20, maxWidth: 760 },
-  title: { fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: 16 },
-  tabs: { display: "flex", gap: 6, marginBottom: 20, borderBottom: "2px solid #e5e7eb", paddingBottom: 0 },
-  tab: { padding: "10px 18px", background: "none", border: "none", borderBottom: "2px solid transparent", marginBottom: -2, fontSize: 13, fontWeight: 600, color: "#6b7280", cursor: "pointer" },
-  tabActive: { borderBottomColor: "#16a34a", color: "#16a34a" },
-  section: { fontWeight: 700, fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 1, margin: "20px 0 10px", paddingTop: 16, borderTop: "1px solid #e5e7eb" },
-  grid4: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 },
-  kpi: { background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 10, padding: "12px 16px" },
-  label: { fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 },
-  input: { width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", fontSize: 14, color: "#111827", outline: "none", background: "#f9fafb", fontFamily: "inherit" },
+  wrap:       { flex: 1, overflowY: "auto", padding: 20, maxWidth: 800 },
+  title:      { fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: 16 },
+  tabs:       { display: "flex", gap: 4, marginBottom: 20, borderBottom: "2px solid #e5e7eb", flexWrap: "wrap" },
+  tab:        { padding: "10px 16px", background: "none", border: "none", borderBottom: "2px solid transparent", marginBottom: -2, fontSize: 13, fontWeight: 600, color: "#6b7280", cursor: "pointer" },
+  tabActive:  { borderBottomColor: "#16a34a", color: "#16a34a" },
+  section:    { fontWeight: 700, fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 1, margin: "20px 0 10px", paddingTop: 16, borderTop: "1px solid #e5e7eb" },
+  grid4:      { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 },
+  kpi:        { background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 10, padding: "12px 16px" },
+  label:      { fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 },
+  input:      { width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", fontSize: 14, color: "#111827", outline: "none", background: "#f9fafb", fontFamily: "inherit" },
   conteoGrid: { display: "flex", flexDirection: "column", gap: 8 },
-  conteoRow: { display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px" },
-  conteoLabel: { width: 80, fontWeight: 700, color: "#374151", fontSize: 14 },
-  conteoX: { color: "#9ca3af", fontSize: 16 },
-  conteoInput: { width: 70, border: "1.5px solid #e5e7eb", borderRadius: 6, padding: "6px 10px", fontSize: 16, fontWeight: 700, textAlign: "center", outline: "none", background: "#f9fafb" },
-  conteoTotal: { marginLeft: "auto", fontWeight: 700, color: "#16a34a", fontSize: 14 },
-  cuadGrid: { background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 },
-  cuadRow: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: "#374151" },
-  addBtn: { background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
-  removeBtn: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 14, marginLeft: 8 },
-  listRow: { display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", marginBottom: 6, fontSize: 14 },
-  empty: { color: "#9ca3af", fontSize: 13, padding: "12px 0", fontStyle: "italic" },
-  saveBtn: { marginTop: 20, width: "100%", padding: 14, background: "#16a34a", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" },
-  success: { marginTop: 20, background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: 14, color: "#16a34a", fontWeight: 700, textAlign: "center" },
+  conteoRow:  { display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px" },
+  conteoLabel:{ width: 80, fontWeight: 700, color: "#374151", fontSize: 14 },
+  conteoX:    { color: "#9ca3af", fontSize: 16 },
+  conteoInput:{ width: 70, border: "1.5px solid #e5e7eb", borderRadius: 6, padding: "6px 10px", fontSize: 16, fontWeight: 700, textAlign: "center", outline: "none", background: "#f9fafb" },
+  conteoTotal:{ marginLeft: "auto", fontWeight: 700, color: "#16a34a", fontSize: 14 },
+  cuadGrid:   { background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 },
+  cuadRow:    { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, color: "#374151" },
+  addBtn:     { background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" },
+  removeBtn:  { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 14, marginLeft: 8 },
+  listRow:    { display: "flex", alignItems: "center", gap: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", marginBottom: 6, fontSize: 14 },
+  empty:      { color: "#9ca3af", fontSize: 13, padding: "12px 0", fontStyle: "italic" },
+  saveBtn:    { marginTop: 20, width: "100%", padding: 14, background: "#16a34a", border: "none", borderRadius: 10, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" },
+  success:    { marginTop: 20, background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: 14, color: "#16a34a", fontWeight: 700, textAlign: "center" },
 };
