@@ -11,7 +11,8 @@ const TIPOS = [
   { key: "caja_vecina", label: "Caja Vecina", icon: "💳" },
   { key: "bip", label: "BIP", icon: "🚌" },
   { key: "servipag", label: "Servipag", icon: "📠" },
-  { key: "loto_kino", label: "Loto y Kino", icon: "🎰" },
+  { key: "loto", label: "Loto", icon: "🎰" },
+  { key: "kino", label: "Kino", icon: "🎰" },
   { key: "encomienda", label: "Encomiendas", icon: "📦" },
 ];
 
@@ -237,8 +238,9 @@ function ConfigComisiones({ reglas, guardarRegla }) {
   const filas = [
     { tipo: "caja_vecina", proveedor: "", label: "Caja Vecina" },
     { tipo: "bip", proveedor: "", label: "BIP" },
-    { tipo: "servipag", proveedor: "", label: "Servipag" },
-    { tipo: "loto_kino", proveedor: "", label: "Loto y Kino" },
+    { tipo: "servipag", proveedor: "Servipag", label: "Servipag" },
+    { tipo: "loto", proveedor: "", label: "Loto" },
+    { tipo: "kino", proveedor: "", label: "Kino" },
     ...PROVEEDORES_ENCOMIENDA.map(p => ({ tipo: "encomienda", proveedor: p, label: `Encomienda — ${p}` })),
   ];
 
