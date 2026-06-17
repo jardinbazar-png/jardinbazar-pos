@@ -13,28 +13,36 @@ export default function Reportes() {
 
   useEffect(() => {
     async function fetchData() {
+      // Pedimos todo con "*" para evitar errores de nombres de columnas
       const [v, d, c] = await Promise.all([
         supabase.from("ventas").select("*"),
-        supabase.from("detalle_ventas").select("producto_nombre, subtotal, cantidad"),
-        supabase.from("costos_productos").select("costo") // Usamos el costo directamente
+        supabase.from("detalle_ventas").select("*"),
+        supabase.from("costos_productos").select("*")
       ]);
-      setDatos({ ventas: v.data || [], detalle: d.data || [], costos: c.data || [] });
+      setDatos({ 
+        ventas: v.data || [], 
+        detalle: d.data || [], 
+        costos: c.data || [] 
+      });
     }
     fetchData();
   }, []);
 
   const reporte = useMemo(() => {
-    // Tomamos el primer costo disponible como referencia para el ejemplo
-    const costoReferencia = datos.costos.length > 0 ? Number(datos.costos[0].costo) : 0;
+    // Si la tabla de costos tiene algo, usamos el primer costo encontrado como fallback
+    const costoDefault = datos.costos.length > 0 ? Number(datos.costos[0].costo) : 0;
     
     return datos.detalle.map(item => {
-      const vendido = Number(item.subtotal) || 0;
-      const costoTotal = costoReferencia * (Number(item.cantidad) || 0);
+      const subtotal = Number(item.subtotal) || 0;
+      // Usamos el costo por unidad si existe, sino el default
+      const costoUnidad = datos.costos.find(c => c.producto_id === item.producto_id)?.costo || costoDefault;
+      const costoTotal = costoUnidad * (Number(item.cantidad) || 1);
+      
       return {
         nombre: item.producto_nombre || "Producto sin nombre",
-        vendido,
+        vendido: subtotal,
         costo: costoTotal,
-        ganancia: vendido - costoTotal
+        ganancia: subtotal - costoTotal
       };
     });
   }, [datos]);
@@ -55,7 +63,7 @@ export default function Reportes() {
             <tr style={{ background: "#f1f5f9" }}>
               <th style={{ padding: 10, textAlign: "left" }}>Producto</th>
               <th style={{ padding: 10, textAlign: "right" }}>Vendido</th>
-              <th style={{ padding: 10, textAlign: "right" }}>Costo Est.</th>
+              <th style={{ padding: 10, textAlign: "right" }}>Costo</th>
               <th style={{ padding: 10, textAlign: "right" }}>Ganancia</th>
             </tr>
           </thead>
