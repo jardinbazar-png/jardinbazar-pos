@@ -13,37 +13,23 @@ export default function Reportes() {
 
   useEffect(() => {
     async function fetchData() {
-      // Pedimos todo con "*" para evitar errores de nombres de columnas
       const [v, d, c] = await Promise.all([
         supabase.from("ventas").select("*"),
         supabase.from("detalle_ventas").select("*"),
         supabase.from("costos_productos").select("*")
       ]);
-      setDatos({ 
-        ventas: v.data || [], 
-        detalle: d.data || [], 
-        costos: c.data || [] 
-      });
+      setDatos({ ventas: v.data || [], detalle: d.data || [], costos: c.data || [] });
     }
     fetchData();
   }, []);
 
   const reporte = useMemo(() => {
-    // Si la tabla de costos tiene algo, usamos el primer costo encontrado como fallback
     const costoDefault = datos.costos.length > 0 ? Number(datos.costos[0].costo) : 0;
-    
     return datos.detalle.map(item => {
       const subtotal = Number(item.subtotal) || 0;
-      // Usamos el costo por unidad si existe, sino el default
       const costoUnidad = datos.costos.find(c => c.producto_id === item.producto_id)?.costo || costoDefault;
       const costoTotal = costoUnidad * (Number(item.cantidad) || 1);
-      
-      return {
-        nombre: item.producto_nombre || "Producto sin nombre",
-        vendido: subtotal,
-        costo: costoTotal,
-        ganancia: subtotal - costoTotal
-      };
+      return { nombre: item.producto_nombre || "Producto sin nombre", vendido: subtotal, costo: costoTotal, ganancia: subtotal - costoTotal };
     });
   }, [datos]);
 
@@ -57,6 +43,11 @@ export default function Reportes() {
         ))}
       </div>
 
+      {tab === "ranking" && <p>🏆 Top productos: {datos.detalle.length} registros analizados.</p>}
+      {tab === "resumen" && <p>📋 Resumen total: {datos.ventas.length} ventas procesadas.</p>}
+      {tab === "costos" && (
+        <ul>{datos.costos.map((c, i) => <li key={i}>Proveedor: {c.proveedor} - Costo: {fmt(c.costo)}</li>)}</ul>
+      )}
       {tab === "utilidad" && (
         <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff" }}>
           <thead>
