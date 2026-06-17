@@ -13,8 +13,15 @@ export default function Reportes() {
 
   const cargarDatos = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("costos_productos").select("*");
-    setCostos(data || []);
+    // Intentamos traer los datos
+    const { data, error } = await supabase.from("costos_productos").select("*");
+    
+    if (error) {
+      console.error("Error al traer datos:", error);
+    } else {
+      console.log("Datos recibidos:", data); // Esto nos dirá si realmente hay algo
+      setCostos(data || []);
+    }
     setLoading(false);
   }, []);
 
@@ -33,13 +40,21 @@ export default function Reportes() {
             </tr>
           </thead>
           <tbody>
-            {costos.map((c) => (
-              <tr key={c.id} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: 10 }}>{c.producto_id}</td>
-                <td style={{ padding: 10 }}>{c.proveedor}</td>
-                <td style={{ padding: 10, textAlign: "right" }}>{fmt(c.costo)}</td>
+            {costos.length > 0 ? (
+              costos.map((c) => (
+                <tr key={c.id} style={{ borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: 10 }}>{c.producto_id}</td>
+                  <td style={{ padding: 10 }}>{c.proveedor}</td>
+                  <td style={{ padding: 10, textAlign: "right" }}>{fmt(c.costo)}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="3" style={{ padding: 20, textAlign: "center" }}>
+                  No hay datos en la tabla. Verifica en Supabase si el registro fue guardado.
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       )}
