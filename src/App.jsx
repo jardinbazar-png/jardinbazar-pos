@@ -256,13 +256,11 @@ const navItems = [
     { key: "inventario", icon: I.box,      label: "Inventario" },
     { key: "caja",       icon: I.cash,     label: "Caja del Día" },
     { key: "turnos",     icon: I.clock,    label: "Turnos" },
-    { key: "loto",       icon: I.filter,   label: "Loto" }, // Botón separado
-    { key: "kino",       icon: I.filter,   label: "Kino" }, // Botón separado
+    { key: "servicios",  icon: I.filter,   label: "Servicios Externos" },
     ...(isAdmin ? [
       { key: "usuarios", icon: I.users,    label: "Usuarios" },
     ] : []),
-  ];
-  return (
+  ];  return (
     <div style={s.root}>
       {/* MENÚ LATERAL */}
       <aside style={s.sidebar}>
@@ -428,8 +426,7 @@ const navItems = [
         {view === "ofertas" && <Ofertas />}
         {view === "caja" && <CierreCaja usuario={usuario} />}
         {view === "turnos" && <Turnos usuario={usuario} />}
-        {view === "loto" && <ServiciosExternos tipo="loto" usuario={usuario} isAdmin={isAdmin} />}
-        {view === "kino" && <ServiciosExternos tipo="kino" usuario={usuario} isAdmin={isAdmin} />}
+        {view === "servicios" && <ServiciosExternos usuario={usuario} isAdmin={isAdmin} />}
         {view === "usuarios" && isAdmin && <Usuarios />}
       </main>
 
