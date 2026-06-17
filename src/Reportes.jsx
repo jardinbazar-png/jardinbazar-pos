@@ -12,61 +12,52 @@ const TABS = [
   { key: "ranking", label: "🏆 Más Vendidos" },
   { key: "resumen", label: "📋 Resumen" },
   { key: "costos", label: "🚚 Costos" },
-  { key: "utilidad", label: "📊 Utilidad (Nueva)" }, // Nueva pestaña
+  { key: "utilidad", label: "📊 Utilidad" },
 ];
 
 export default function Reportes() {
   const [tab, setTab] = useState("utilidad");
-  const [ventasRango, setVentasRango] = useState([]);
-  const [detalleRango, setDetalleRango] = useState([]);
-  const [costosRango, setCostosRango] = useState([]);
-  const [productosMap, setProductosMap] = useState(new Map());
+  const [ventas, setVentas] = useState([]);
+  const [detalle, setDetalle] = useState([]);
+  const [costos, setCostos] = useState([]);
 
-  // Cargar productos para tener nombres
   useEffect(() => {
-    supabase.from("productos").select("id, nombre").then(({ data }) => {
-      if (data) setProductosMap(new Map(data.map((p) => [p.id, p])));
-    });
-    
-    // Cargar datos iniciales
-    cargarDatos();
+    async function fetchData() {
+      const [v, d, c] = await Promise.all([
+        supabase.from("ventas").select("*"),
+        supabase.from("detalle_ventas").select("*"),
+        supabase.from(TABLE_COSTOS).select("*")
+      ]);
+      setVentas(v.data || []);
+      setDetalle(d.data || []);
+      setCostos(c.data || []);
+    }
+    fetchData();
   }, []);
 
-  const cargarDatos = async () => {
-    const [resVentas, resDetalle, resCostos] = await Promise.all([
-      supabase.from("ventas").select("*"),
-      supabase.from("detalle_ventas").select("producto_id, producto_nombre, cantidad, subtotal"),
-      supabase.from(TABLE_COSTOS).select("*")
-    ]);
-    
-    setVentasRango(resVentas.data || []);
-    setDetalleRango(resDetalle.data || []);
-    setCostosRango(resCostos.data || []);
-  };
+  const dataUtilidad = useMemo(() => {
+    const mapa = new Map();
+    // Agrupamos costos por producto_id (tomando el último costo)
+    const ultimosCostos = new Map();
+    costos.forEach(c => ultimosCostos.set(c.producto_id, c.costo));
 
-  // Lógica de utilidad (Fusión)
-  const reporteUtilidad = useMemo(() => {
-    const costosPromedio = new Map();
-    costosRango.forEach(c => {
-      costosPromedio.set(c.producto_id, c.costo); // Toma el último costo registrado
-    });
+    detalle.forEach(d => {
+      const id = d.producto_id;
+      const costoU = ultimosCostos.get(id) || 0;
+      const ingreso = Number(d.subtotal) || 0;
+      const costoTotal = costoU * (Number(d.cantidad) || 0);
 
-    const mapaUtilidad = new Map();
-    detalleRango.forEach(d => {
-      const costoUnitario = costosPromedio.get(d.producto_id) || 0;
-      const costoTotal = costoUnitario * d.cantidad;
-      const ingreso = Number(d.subtotal);
-      
-      if (!mapaUtilidad.has(d.producto_id)) {
-        mapaUtilidad.set(d.producto_id, { nombre: d.producto_nombre, vendido: 0, costo: 0, ganancia: 0 });
-      }
-      const r = mapaUtilidad.get(d.producto_id);
+      if (!mapa.has(id)) mapa.set(id, { nombre: d.producto_nombre, vendido: 0, costo: 0 });
+      const r = mapa.get(id);
       r.vendido += ingreso;
       r.costo += costoTotal;
-      r.ganancia += (ingreso - costoTotal);
     });
-    return Array.from(mapaUtilidad.values()).sort((a, b) => b.ganancia - a.ganancia);
-  }, [detalleRango, costosRango]);
+    
+    return Array.from(mapa.values()).map(r => ({
+      ...r,
+      ganancia: r.vendido - r.costo
+    })).sort((a, b) => b.ganancia - a.ganancia);
+  }, [detalle, costos]);
 
   return (
     <div style={{ padding: 20 }}>
@@ -78,6 +69,8 @@ export default function Reportes() {
         ))}
       </div>
 
+      {tab === "ranking" && <p>Total Ventas: {ventas.length} registros cargados.</p>}
+      
       {tab === "utilidad" && (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -89,7 +82,7 @@ export default function Reportes() {
             </tr>
           </thead>
           <tbody>
-            {reporteUtilidad.map((r, i) => (
+            {dataUtilidad.map((r, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: 10 }}>{r.nombre}</td>
                 <td style={{ padding: 10, textAlign: "right" }}>{fmt(r.vendido)}</td>
