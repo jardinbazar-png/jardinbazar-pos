@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
+// USAMOS LA PUBLIC KEY, NO LA SECRET KEY
+const SUPABASE_KEY = "sb_publishable_ntaEm56Or8HgmabowxI_jg_yTISD-NZ"; 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const fmt = (n) => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(n ?? 0);
@@ -13,13 +14,13 @@ export default function Reportes() {
 
   const cargarDatos = useCallback(async () => {
     setLoading(true);
-    // Intentamos traer los datos
-const { data, error } = await supabase.from("costos_productos").select("*");
+    // Cambiamos a una consulta simple
+    const { data, error } = await supabase.from("costos_productos").select("*");
     
     if (error) {
-      console.error("Error al traer datos:", error);
+      console.error("Error detallado:", error);
     } else {
-      console.log("Datos recibidos:", data); // Esto nos dirá si realmente hay algo
+      console.log("Datos recibidos:", data);
       setCostos(data || []);
     }
     setLoading(false);
@@ -51,7 +52,7 @@ const { data, error } = await supabase.from("costos_productos").select("*");
             ) : (
               <tr>
                 <td colSpan="3" style={{ padding: 20, textAlign: "center" }}>
-                  No hay datos en la tabla. Verifica en Supabase si el registro fue guardado.
+                  No se encontraron datos. Asegúrate de haber guardado al menos una fila en Supabase.
                 </td>
               </tr>
             )}
