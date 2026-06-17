@@ -10,6 +10,7 @@ import Inventario from "./Inventario.jsx";
 import Ventas from "./Ventas.jsx";
 import Ofertas from "./Ofertas.jsx";
 import ServiciosExternos from "./ServiciosExternos.jsx";
+import Reportes from "./Reportes.jsx";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcmNnaHFoY2l1cXBqZWRvbXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMzI1MjAsImV4cCI6MjA5NjcwODUyMH0.tpxnLu0yLviVAt-QswRf8JBVs2Y9yVqKN47coo_nB6A";
@@ -259,6 +260,7 @@ const navItems = [
     { key: "servicios",  icon: I.filter,   label: "Servicios Externos" },
     ...(isAdmin ? [
       { key: "usuarios", icon: I.users,    label: "Usuarios" },
+{ key: "reportes", icon: I.chart, label: "Reportes" },
     ] : []),
   ];  return (
     <div style={s.root}>
@@ -428,6 +430,7 @@ const navItems = [
         {view === "turnos" && <Turnos usuario={usuario} />}
         {view === "servicios" && <ServiciosExternos usuario={usuario} isAdmin={isAdmin} />}
         {view === "usuarios" && isAdmin && <Usuarios />}
+{view === "reportes" && <Reportes />}
       </main>
 
       {/* MODAL COBRO (CON CONEXIÓN CORRECTA) */}
