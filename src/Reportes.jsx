@@ -14,7 +14,7 @@ export default function Reportes() {
   const cargarDatos = useCallback(async () => {
     setLoading(true);
     // Intentamos traer los datos
-    const { data, error } = await supabase.from("costos_productos").select("*");
+const { data, error } = await supabase.from("costos_productos").select("*");
     
     if (error) {
       console.error("Error al traer datos:", error);
