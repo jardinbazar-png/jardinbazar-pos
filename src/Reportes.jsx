@@ -1,19 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
 const SUPABASE_KEY = "sb_publishable_ntaEm56Or8HgmabowxI_jg_yTISD-NZ";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const TABLE_COSTOS = "costos_productos";
 const fmt = (n) => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(n ?? 0);
-
-const TABS = [
-  { key: "ranking", label: "🏆 Más Vendidos" },
-  { key: "resumen", label: "📋 Resumen" },
-  { key: "costos", label: "🚚 Costos" },
-  { key: "utilidad", label: "📊 Utilidad" },
-];
 
 export default function Reportes() {
   const [tab, setTab] = useState("utilidad");
@@ -26,7 +18,7 @@ export default function Reportes() {
       const [v, d, c] = await Promise.all([
         supabase.from("ventas").select("*"),
         supabase.from("detalle_ventas").select("*"),
-        supabase.from(TABLE_COSTOS).select("*")
+        supabase.from("costos_productos").select("*")
       ]);
       setVentas(v.data || []);
       setDetalle(d.data || []);
@@ -37,40 +29,39 @@ export default function Reportes() {
 
   const dataUtilidad = useMemo(() => {
     const mapa = new Map();
-    // Agrupamos costos por producto_id (tomando el último costo)
-    const ultimosCostos = new Map();
-    costos.forEach(c => ultimosCostos.set(c.producto_id, c.costo));
+    // Mapa de costos: buscamos tanto por ID como por Nombre si es posible
+    const costosMap = new Map();
+    costos.forEach(c => {
+       // Si no tienes el ID, usa el nombre del proveedor o un identificador único
+       costosMap.set(c.producto_id, c.costo);
+    });
 
     detalle.forEach(d => {
       const id = d.producto_id;
-      const costoU = ultimosCostos.get(id) || 0;
-      const ingreso = Number(d.subtotal) || 0;
-      const costoTotal = costoU * (Number(d.cantidad) || 0);
-
+      const costoU = costosMap.get(id) || 0; // Aquí busca el costo
+      
       if (!mapa.has(id)) mapa.set(id, { nombre: d.producto_nombre, vendido: 0, costo: 0 });
       const r = mapa.get(id);
-      r.vendido += ingreso;
-      r.costo += costoTotal;
+      r.vendido += Number(d.subtotal) || 0;
+      r.costo += (costoU * (Number(d.cantidad) || 0));
     });
     
     return Array.from(mapa.values()).map(r => ({
       ...r,
       ganancia: r.vendido - r.costo
-    })).sort((a, b) => b.ganancia - a.ganancia);
+    }));
   }, [detalle, costos]);
 
   return (
     <div style={{ padding: 20 }}>
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-        {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{ padding: "8px 15px", background: tab === t.key ? "#0f172a" : "#e2e8f0", color: tab === t.key ? "#fff" : "#000", border: "none", borderRadius: 5 }}>
-            {t.label}
+        {["ranking", "resumen", "costos", "utilidad"].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ textTransform: "capitalize", padding: "8px 15px", background: tab === t ? "#0f172a" : "#e2e8f0", color: tab === t ? "#fff" : "#000", border: "none", borderRadius: 5 }}>
+            {t}
           </button>
         ))}
       </div>
 
-      {tab === "ranking" && <p>Total Ventas: {ventas.length} registros cargados.</p>}
-      
       {tab === "utilidad" && (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
