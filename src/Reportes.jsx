@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// Configuración fuera del componente para evitar errores de consola
 const supabase = createClient(
   "https://carcghqhciuqpjedomuw.supabase.co",
   "sb_publishable_ntaEm56Or8HgmabowxI_jg_yTISD-NZ"
@@ -60,6 +59,7 @@ export default function Reportes() {
       </div>
 
       <div style={{ background: "#fff", padding: "20px", borderRadius: "12px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
+        {/* Lógica mejorada para mostrar contenido en todas las pestañas */}
         {tab === "utilidad" && (
           <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 10px" }}>
             <thead>
@@ -76,16 +76,20 @@ export default function Reportes() {
                   <td style={{ padding: "15px", borderRadius: "8px 0 0 8px", fontWeight: "500" }}>{r.nombre}</td>
                   <td style={{ padding: "15px", textAlign: "right" }}>{fmt(r.vendido)}</td>
                   <td style={{ padding: "15px", textAlign: "right", color: "#64748b" }}>{fmt(r.costo)}</td>
-                  <td style={{ padding: "15px", textAlign: "right", borderRadius: "0 8px 8px 0", fontWeight: "bold", color: r.ganancia >= 0 ? "#16a34a" : "#dc2626" }}>
-                    {fmt(r.ganancia)}
-                  </td>
+                  <td style={{ padding: "15px", textAlign: "right", borderRadius: "0 8px 8px 0", fontWeight: "bold", color: r.ganancia >= 0 ? "#16a34a" : "#dc2626" }}>{fmt(r.ganancia)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        {/* Placeholder para otras pestañas */}
-        {tab !== "utilidad" && <p style={{ textAlign: "center", color: "#94a3b8" }}>Seleccione "Utilidad" para ver el reporte detallado.</p>}
+        {tab === "ranking" && <p>🏆 <b>Top productos:</b> Tienes {datos.detalle.length} registros analizados.</p>}
+        {tab === "resumen" && <p>📋 <b>Resumen:</b> Total de {datos.ventas.length} ventas procesadas en el sistema.</p>}
+        {tab === "costos" && (
+          <div>
+            <h3>🚚 Lista de costos registrados</h3>
+            {datos.costos.map((c, i) => <p key={i}>Proveedor: {c.proveedor || "Desconocido"} | Costo: {fmt(c.costo)}</p>)}
+          </div>
+        )}
       </div>
     </div>
   );
