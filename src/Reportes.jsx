@@ -23,7 +23,7 @@ export default function Reportes() {
     fetchData();
   }, []);
 
-  const reporte = useMemo(() => {
+  const reporteUtilidad = useMemo(() => {
     const costoDefault = datos.costos.length > 0 ? Number(datos.costos[0].costo) : 0;
     return datos.detalle.map(item => {
       const subtotal = Number(item.subtotal) || 0;
@@ -37,17 +37,27 @@ export default function Reportes() {
     <div style={{ padding: 20 }}>
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
         {["ranking", "resumen", "costos", "utilidad"].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ textTransform: "uppercase", padding: "8px 15px", background: tab === t ? "#0f172a" : "#e2e8f0", color: tab === t ? "#fff" : "#000", border: "none", borderRadius: 5 }}>
+          <button key={t} onClick={() => setTab(t)} style={{ textTransform: "uppercase", padding: "8px 15px", background: tab === t ? "#0f172a" : "#e2e8f0", color: tab === t ? "#fff" : "#000", border: "none", borderRadius: 5, cursor: 'pointer' }}>
             {t}
           </button>
         ))}
       </div>
 
-      {tab === "ranking" && <p>🏆 Top productos: {datos.detalle.length} registros analizados.</p>}
-      {tab === "resumen" && <p>📋 Resumen total: {datos.ventas.length} ventas procesadas.</p>}
-      {tab === "costos" && (
-        <ul>{datos.costos.map((c, i) => <li key={i}>Proveedor: {c.proveedor} - Costo: {fmt(c.costo)}</li>)}</ul>
+      {/* AQUÍ ESTÁ LA LÓGICA: Cada pestaña muestra su contenido */}
+      {tab === "ranking" && (
+        <div><h3>🏆 Ranking de Ventas</h3><p>Total ventas: {datos.ventas.length}</p></div>
       )}
+      
+      {tab === "resumen" && (
+        <div><h3>📋 Resumen General</h3><p>Detalles procesados: {datos.detalle.length}</p></div>
+      )}
+
+      {tab === "costos" && (
+        <div><h3>🚚 Gestión de Costos</h3>
+          <ul>{datos.costos.map((c, i) => <li key={i}>Proveedor: {c.proveedor || "Sin nombre"} - Costo: {fmt(c.costo)}</li>)}</ul>
+        </div>
+      )}
+
       {tab === "utilidad" && (
         <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff" }}>
           <thead>
@@ -59,7 +69,7 @@ export default function Reportes() {
             </tr>
           </thead>
           <tbody>
-            {reporte.map((r, i) => (
+            {reporteUtilidad.map((r, i) => (
               <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: 10 }}>{r.nombre}</td>
                 <td style={{ padding: 10, textAlign: "right" }}>{fmt(r.vendido)}</td>
