@@ -25,20 +25,25 @@ export default function Reportes() {
           </tr>
         </thead>
         <tbody>
-          {data.map((item, i) => {
-            const v = item.valor_venta || 0;
-            const c = item.costo_unidad || 0;
-            const g = v - c;
-            return (
-              <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-                <td>{item.nombre_producto}</td>
-                <td>${v}</td>
-                <td>${c}</td>
-                <td style={{ color: g >= 0 ? "green" : "red", fontWeight: "bold" }}>${g}</td>
-              </tr>
-            );
-          })}
-        </tbody>
+  {data.map((item, i) => {
+    const v = item.valor_venta || 0;
+    const c = item.costo_unidad || 0;
+    const g = v - c;
+    return (
+      <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
+        <td>{item.nombre_producto}</td>
+        <td>${v}</td>
+        <td>
+            {c === 0 ? 
+              <span style={{color: 'orange', fontSize: '10px'}}>SIN COSTO</span> : 
+              `$${c}`
+            }
+        </td>
+        <td style={{ color: g >= 0 ? "green" : "red", fontWeight: "bold" }}>${g}</td>
+      </tr>
+    );
+  })}
+</tbody>
       </table>
     </div>
   );
