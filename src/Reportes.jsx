@@ -24,27 +24,27 @@ export default function Reportes() {
             <th>Producto</th><th>Vendido</th><th>Costo</th><th>Ganancia</th>
           </tr>
         </thead>
-        <tbody>
+      <tbody>
   {data.map((item, i) => {
     const v = item.valor_venta || 0;
+    // Si no encuentra costo (es null), ponemos 0 automáticamente
     const c = item.costo_unidad || 0;
     const g = v - c;
+    
     return (
       <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-        <td>{item.nombre_producto}</td>
-        <td>${v}</td>
-        <td>
+        <td style={{ padding: "10px" }}>{item.nombre_producto}</td>
+        <td style={{ padding: "10px" }}>${v.toLocaleString()}</td>
+        <td style={{ padding: "10px" }}>
             {c === 0 ? 
-              <span style={{color: 'orange', fontSize: '10px'}}>SIN COSTO</span> : 
-              `$${c}`
+              <span style={{color: '#d9534f', fontWeight: 'bold'}}>PENDIENTE</span> : 
+              `$${c.toLocaleString()}`
             }
         </td>
-        <td style={{ color: g >= 0 ? "green" : "red", fontWeight: "bold" }}>${g}</td>
+        <td style={{ padding: "10px", color: g >= 0 ? "green" : "red", fontWeight: "bold" }}>
+            ${g.toLocaleString()}
+        </td>
       </tr>
     );
   })}
 </tbody>
-      </table>
-    </div>
-  );
-}
