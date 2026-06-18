@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://carcghqhciuqpjedomuw.supabase.co";
-const SUPABASE_KEY = "sb_publishable_ntaEm56Or8HgmabowxI_jg_yTISD-NZ";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Configuración fuera del componente para evitar errores de consola
+const supabase = createClient(
+  "https://carcghqhciuqpjedomuw.supabase.co",
+  "sb_publishable_ntaEm56Or8HgmabowxI_jg_yTISD-NZ"
+);
 
 const fmt = (n) => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(n ?? 0);
 
@@ -24,62 +26,67 @@ export default function Reportes() {
   }, []);
 
   const reporteUtilidad = useMemo(() => {
-    const costoDefault = datos.costos.length > 0 ? Number(datos.costos[0].costo) : 0;
     return datos.detalle.map(item => {
       const subtotal = Number(item.subtotal) || 0;
-      const costoUnidad = datos.costos.find(c => c.producto_id === item.producto_id)?.costo || costoDefault;
+      const costoUnidad = datos.costos.find(c => c.producto_id === item.producto_id)?.costo || 0;
       const costoTotal = costoUnidad * (Number(item.cantidad) || 1);
-      return { nombre: item.producto_nombre || "Producto sin nombre", vendido: subtotal, costo: costoTotal, ganancia: subtotal - costoTotal };
+      return { 
+        nombre: item.producto_nombre || "Sin nombre asignado", 
+        vendido: subtotal, 
+        costo: costoTotal, 
+        ganancia: subtotal - costoTotal 
+      };
     });
   }, [datos]);
 
+  const btnStyle = (t) => ({
+    padding: "10px 20px",
+    background: tab === t ? "#1e293b" : "#f1f5f9",
+    color: tab === t ? "#fff" : "#475569",
+    border: "none",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    fontSize: "12px"
+  });
+
   return (
-    <div style={{ padding: 20 }}>
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+    <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
+      <div style={{ display: "flex", gap: "10px", marginBottom: "30px" }}>
         {["ranking", "resumen", "costos", "utilidad"].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ textTransform: "uppercase", padding: "8px 15px", background: tab === t ? "#0f172a" : "#e2e8f0", color: tab === t ? "#fff" : "#000", border: "none", borderRadius: 5, cursor: 'pointer' }}>
-            {t}
-          </button>
+          <button key={t} onClick={() => setTab(t)} style={btnStyle(t)}>{t}</button>
         ))}
       </div>
 
-      {/* AQUÍ ESTÁ LA LÓGICA: Cada pestaña muestra su contenido */}
-      {tab === "ranking" && (
-        <div><h3>🏆 Ranking de Ventas</h3><p>Total ventas: {datos.ventas.length}</p></div>
-      )}
-      
-      {tab === "resumen" && (
-        <div><h3>📋 Resumen General</h3><p>Detalles procesados: {datos.detalle.length}</p></div>
-      )}
-
-      {tab === "costos" && (
-        <div><h3>🚚 Gestión de Costos</h3>
-          <ul>{datos.costos.map((c, i) => <li key={i}>Proveedor: {c.proveedor || "Sin nombre"} - Costo: {fmt(c.costo)}</li>)}</ul>
-        </div>
-      )}
-
-      {tab === "utilidad" && (
-        <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff" }}>
-          <thead>
-            <tr style={{ background: "#f1f5f9" }}>
-              <th style={{ padding: 10, textAlign: "left" }}>Producto</th>
-              <th style={{ padding: 10, textAlign: "right" }}>Vendido</th>
-              <th style={{ padding: 10, textAlign: "right" }}>Costo</th>
-              <th style={{ padding: 10, textAlign: "right" }}>Ganancia</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reporteUtilidad.map((r, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: 10 }}>{r.nombre}</td>
-                <td style={{ padding: 10, textAlign: "right" }}>{fmt(r.vendido)}</td>
-                <td style={{ padding: 10, textAlign: "right", color: "#ef4444" }}>{fmt(r.costo)}</td>
-                <td style={{ padding: 10, textAlign: "right", fontWeight: "bold", color: "#16a34a" }}>{fmt(r.ganancia)}</td>
+      <div style={{ background: "#fff", padding: "20px", borderRadius: "12px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
+        {tab === "utilidad" && (
+          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 10px" }}>
+            <thead>
+              <tr style={{ color: "#64748b", textAlign: "left" }}>
+                <th style={{ padding: "10px" }}>Producto</th>
+                <th style={{ padding: "10px", textAlign: "right" }}>Vendido</th>
+                <th style={{ padding: "10px", textAlign: "right" }}>Costo</th>
+                <th style={{ padding: "10px", textAlign: "right" }}>Ganancia</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            </thead>
+            <tbody>
+              {reporteUtilidad.map((r, i) => (
+                <tr key={i} style={{ background: "#f8fafc", borderRadius: "8px" }}>
+                  <td style={{ padding: "15px", borderRadius: "8px 0 0 8px", fontWeight: "500" }}>{r.nombre}</td>
+                  <td style={{ padding: "15px", textAlign: "right" }}>{fmt(r.vendido)}</td>
+                  <td style={{ padding: "15px", textAlign: "right", color: "#64748b" }}>{fmt(r.costo)}</td>
+                  <td style={{ padding: "15px", textAlign: "right", borderRadius: "0 8px 8px 0", fontWeight: "bold", color: r.ganancia >= 0 ? "#16a34a" : "#dc2626" }}>
+                    {fmt(r.ganancia)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {/* Placeholder para otras pestañas */}
+        {tab !== "utilidad" && <p style={{ textAlign: "center", color: "#94a3b8" }}>Seleccione "Utilidad" para ver el reporte detallado.</p>}
+      </div>
     </div>
   );
 }
